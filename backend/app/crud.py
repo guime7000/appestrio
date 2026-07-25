@@ -3,13 +3,53 @@ import uuid
 from sqlmodel import Session, func, select
 
 from app.models import (
+    Calendar,
+    CalendarCreate,
     CalendarPublic,
+    CalendarUpdate,
     Device,
     DeviceCreate,
     DevicePublic,
     DeviceUpdate,
     utcnow,
 )
+
+
+def create_calendar(*, session: Session, calendar_create: CalendarCreate) -> Calendar:
+    db_calendar = Calendar.model_validate(calendar_create)
+    session.add(db_calendar)
+    session.commit()
+    session.refresh(db_calendar)
+    return db_calendar
+
+
+def get_calendar(*, session: Session, calendar_uuid: uuid.UUID) -> Calendar | None:
+    return session.get(Calendar, calendar_uuid)
+
+
+def get_calendars(
+    *, session: Session, skip: int = 0, limit: int = 100
+) -> tuple[list[Calendar], int]:
+    count = session.exec(select(func.count()).select_from(Calendar)).one()
+    calendars = session.exec(select(Calendar).offset(skip).limit(limit)).all()
+    return list(calendars), count
+
+
+def update_calendar(
+    *, session: Session, db_calendar: Calendar, calendar_in: CalendarUpdate
+) -> Calendar:
+    update_data = calendar_in.model_dump(exclude_unset=True)
+    db_calendar.sqlmodel_update(update_data)
+    db_calendar.updated_at = utcnow()
+    session.add(db_calendar)
+    session.commit()
+    session.refresh(db_calendar)
+    return db_calendar
+
+
+def delete_calendar(*, session: Session, db_calendar: Calendar) -> None:
+    session.delete(db_calendar)
+    session.commit()
 
 
 def create_device(*, session: Session, device_create: DeviceCreate) -> Device:

@@ -3,11 +3,5 @@
 set -e
 set -x
 
-# Let the DB start
-python app/backend_pre_start.py
-
-# Run migrations
-alembic upgrade head
-
-# Create initial data in DB
-python app/initial_data.py
+# SQLite needs no server to wait for. Create the tables if they don't exist yet.
+python -c "from app.core.db import init_db; init_db()"

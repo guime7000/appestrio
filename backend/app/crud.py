@@ -11,6 +11,9 @@ from app.models import (
     DeviceCreate,
     DevicePublic,
     DeviceUpdate,
+    Group,
+    GroupCreate,
+    GroupUpdate,
     utcnow,
 )
 
@@ -49,6 +52,43 @@ def update_calendar(
 
 def delete_calendar(*, session: Session, db_calendar: Calendar) -> None:
     session.delete(db_calendar)
+    session.commit()
+
+
+def create_group(*, session: Session, group_create: GroupCreate) -> Group:
+    db_group = Group.model_validate(group_create)
+    session.add(db_group)
+    session.commit()
+    session.refresh(db_group)
+    return db_group
+
+
+def get_group(*, session: Session, group_uuid: uuid.UUID) -> Group | None:
+    return session.get(Group, group_uuid)
+
+
+def get_groups(
+    *, session: Session, skip: int = 0, limit: int = 100
+) -> tuple[list[Group], int]:
+    count = session.exec(select(func.count()).select_from(Group)).one()
+    groups = session.exec(select(Group).offset(skip).limit(limit)).all()
+    return list(groups), count
+
+
+def update_group(
+    *, session: Session, db_group: Group, group_in: GroupUpdate
+) -> Group:
+    update_data = group_in.model_dump(exclude_unset=True)
+    db_group.sqlmodel_update(update_data)
+    db_group.updated_at = utcnow()
+    session.add(db_group)
+    session.commit()
+    session.refresh(db_group)
+    return db_group
+
+
+def delete_group(*, session: Session, db_group: Group) -> None:
+    session.delete(db_group)
     session.commit()
 
 

@@ -73,6 +73,26 @@ class Group(GroupBase, table=True):
     devices: list[Device] = Relationship(back_populates="group")
 
 
+class GroupCreate(GroupBase):
+    calendar_id: UUID | None = None
+
+
+class GroupUpdate(SQLModel):
+    label: str | None = Field(default=None, min_length=1, max_length=255)
+    calendar_id: UUID | None = None
+
+
+class GroupPublic(GroupBase):
+    uuid: UUID
+    calendar_id: UUID | None = None
+    updated_at: datetime
+
+
+class GroupsPublic(SQLModel):
+    data: list[GroupPublic]
+    count: int
+
+
 # ---------------------------------------------------------------------------
 # Device (Lumestrio)
 # ---------------------------------------------------------------------------

@@ -35,6 +35,19 @@ def create_group(
     return group
 
 
+def calendar_payload(**overrides: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "label": "Default calendar",
+        "presets": {
+            "setup1": {"start_time": "09:15", "end_time": "19:00"},
+            "exception": {"start_time": "10:15", "end_time": "11:30"},
+        },
+        "days": {"lundi": "setup1", "mardi": "setup1"},
+    }
+    payload.update(overrides)
+    return payload
+
+
 def device_payload(**overrides: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "device_id": f"lumestrio-{uuid.uuid4().hex[:8]}",

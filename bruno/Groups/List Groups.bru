@@ -1,0 +1,16 @@
+meta {
+  name: List Groups
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/groups/
+  body: none
+  auth: none
+}
+
+params:query {
+  ~skip: 0
+  ~limit: 100
+}

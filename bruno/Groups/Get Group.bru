@@ -1,0 +1,11 @@
+meta {
+  name: Get Group
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/groups/{{groupUuid}}
+  body: none
+  auth: none
+}

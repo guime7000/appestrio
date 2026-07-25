@@ -1,0 +1,17 @@
+meta {
+  name: Update Group
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/groups/{{groupUuid}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "label": "group A renamed"
+  }
+}

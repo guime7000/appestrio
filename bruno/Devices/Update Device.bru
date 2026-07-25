@@ -1,0 +1,17 @@
+meta {
+  name: Update Device
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/devices/{{deviceUuid}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "audiofile": "new_audio.mp3"
+  }
+}

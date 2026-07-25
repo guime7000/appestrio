@@ -1,0 +1,19 @@
+meta {
+  name: Update Calendar
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/calendars/{{calendarUuid}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "days": {
+      "mercredi": "setup1"
+    }
+  }
+}

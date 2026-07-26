@@ -95,3 +95,53 @@ def test_group_devices_relationship(session: Session) -> None:
     session.refresh(group)
 
     assert len(group.devices) == 1
+
+
+def test_set_group_devices(session: Session) -> None:
+    group = crud.create_group(
+        session=session, group_create=GroupCreate(**group_payload())
+    )
+    device = crud.create_device(
+        session=session, device_create=DeviceCreate(**device_payload())
+    )
+
+    updated = crud.set_group_devices(
+        session=session, db_group=group, device_uuids=[device.uuid]
+    )
+
+    assert [d.uuid for d in updated.devices] == [device.uuid]
+    session.refresh(device)
+    assert device.group_id == group.uuid
+
+
+def test_set_group_devices_unassigns_removed_devices(session: Session) -> None:
+    group = crud.create_group(
+        session=session, group_create=GroupCreate(**group_payload())
+    )
+    device = crud.create_device(
+        session=session,
+        device_create=DeviceCreate(**device_payload(group_id=group.uuid)),
+    )
+
+    crud.set_group_devices(session=session, db_group=group, device_uuids=[])
+
+    session.refresh(device)
+    assert device.group_id is None
+
+
+def test_set_group_devices_not_found(session: Session) -> None:
+    group = crud.create_group(
+        session=session, group_create=GroupCreate(**group_payload())
+    )
+    missing_uuid = uuid.uuid4()
+
+    try:
+        crud.set_group_devices(
+            session=session, db_group=group, device_uuids=[missing_uuid]
+        )
+        raised = False
+    except crud.DeviceNotFoundError as exc:
+        raised = True
+        assert exc.missing_uuids == [missing_uuid]
+
+    assert raised

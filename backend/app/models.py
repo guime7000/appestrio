@@ -93,6 +93,10 @@ class GroupsPublic(SQLModel):
     count: int
 
 
+class GroupDevicesUpdate(SQLModel):
+    device_uuids: list[UUID]
+
+
 # ---------------------------------------------------------------------------
 # Device (Lumestrio)
 # ---------------------------------------------------------------------------

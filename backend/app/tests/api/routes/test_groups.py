@@ -120,3 +120,59 @@ def test_delete_group_in_use_by_device(client: TestClient, session: Session) -> 
     response = client.delete(f"{GROUPS_URL}{group.uuid}")
 
     assert response.status_code == 409
+
+
+def test_set_group_devices(client: TestClient, session: Session) -> None:
+    group = create_group(session)
+    device = client.post(DEVICES_URL, json=device_payload()).json()
+
+    response = client.patch(
+        f"{GROUPS_URL}{group.uuid}/devices",
+        json={"device_uuids": [device["uuid"]]},
+    )
+
+    assert response.status_code == 200
+    content = response.json()
+    assert content["count"] == 1
+    assert content["data"][0]["uuid"] == device["uuid"]
+    assert content["data"][0]["group"] == group.label
+
+
+def test_set_group_devices_unassigns_removed_devices(
+    client: TestClient, session: Session
+) -> None:
+    group = create_group(session)
+    device = client.post(
+        DEVICES_URL, json=device_payload(group_id=str(group.uuid))
+    ).json()
+
+    response = client.patch(
+        f"{GROUPS_URL}{group.uuid}/devices", json={"device_uuids": []}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["count"] == 0
+
+    get_device = client.get(f"{DEVICES_URL}{device['uuid']}")
+    assert get_device.json()["group"] is None
+
+
+def test_set_group_devices_with_unknown_device(
+    client: TestClient, session: Session
+) -> None:
+    group = create_group(session)
+
+    response = client.patch(
+        f"{GROUPS_URL}{group.uuid}/devices",
+        json={"device_uuids": [str(uuid.uuid4())]},
+    )
+
+    assert response.status_code == 404
+
+
+def test_set_group_devices_group_not_found(client: TestClient) -> None:
+    response = client.patch(
+        f"{GROUPS_URL}{uuid.uuid4()}/devices", json={"device_uuids": []}
+    )
+
+    assert response.status_code == 404

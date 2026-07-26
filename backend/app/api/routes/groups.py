@@ -6,8 +6,10 @@ from app import crud
 from app.api.deps import SessionDep
 from app.models import (
     Calendar,
+    DevicesPublic,
     Group,
     GroupCreate,
+    GroupDevicesUpdate,
     GroupPublic,
     GroupsPublic,
     GroupUpdate,
@@ -53,6 +55,26 @@ def update_group(
     group = _get_group_or_404(session, group_uuid)
     _check_calendar_exists(session, group_in.calendar_id)
     return crud.update_group(session=session, db_group=group, group_in=group_in)
+
+
+@router.patch("/{group_uuid}/devices", response_model=DevicesPublic)
+def set_group_devices(
+    session: SessionDep, group_uuid: uuid.UUID, devices_in: GroupDevicesUpdate
+) -> DevicesPublic:
+    group = _get_group_or_404(session, group_uuid)
+    try:
+        group = crud.set_group_devices(
+            session=session, db_group=group, device_uuids=devices_in.device_uuids
+        )
+    except crud.DeviceNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Device(s) not found: {', '.join(str(u) for u in exc.missing_uuids)}",
+        )
+    return DevicesPublic(
+        data=[crud.device_to_public(device) for device in group.devices],
+        count=len(group.devices),
+    )
 
 
 @router.delete("/{group_uuid}", response_model=Message)

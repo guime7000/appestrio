@@ -1,0 +1,29 @@
+meta {
+  name: Create Device
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/devices/
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "device_id": "lumestrio13",
+    "device_name": "Le 13e lumestrio",
+    "active": true,
+    "group_id": "{{groupUuid}}",
+    "audiofile": "the audio.mp3",
+    "ip": "127.0.0.13",
+    "master_ip": "127.0.0.1"
+  }
+}
+
+script:post-response {
+  if (res.body && res.body.uuid) {
+    bru.setVar("deviceUuid", res.body.uuid);
+  }
+}

@@ -1,0 +1,16 @@
+meta {
+  name: List Devices
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/devices/
+  body: none
+  auth: none
+}
+
+params:query {
+  ~skip: 0
+  ~limit: 100
+}

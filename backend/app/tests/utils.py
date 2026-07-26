@@ -48,6 +48,12 @@ def calendar_payload(**overrides: Any) -> dict[str, Any]:
     return payload
 
 
+def group_payload(**overrides: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {"label": "Group A"}
+    payload.update(overrides)
+    return payload
+
+
 def device_payload(**overrides: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "device_id": f"lumestrio-{uuid.uuid4().hex[:8]}",

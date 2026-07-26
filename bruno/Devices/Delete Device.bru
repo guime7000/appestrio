@@ -1,0 +1,11 @@
+meta {
+  name: Delete Device
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/devices/{{deviceUuid}}
+  body: none
+  auth: none
+}

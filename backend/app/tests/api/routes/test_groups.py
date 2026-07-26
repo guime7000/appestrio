@@ -40,6 +40,21 @@ def test_create_group_with_calendar(client: TestClient, session: Session) -> Non
     assert response.json()["calendar_id"] == str(calendar.uuid)
 
 
+def test_get_group_includes_devices(client: TestClient, session: Session) -> None:
+    group = create_group(session)
+    device = client.post(
+        DEVICES_URL, json=device_payload(group_id=str(group.uuid))
+    ).json()
+
+    response = client.get(f"{GROUPS_URL}{group.uuid}")
+
+    assert response.status_code == 200
+    devices = response.json()["devices"]
+    assert len(devices) == 1
+    assert devices[0]["uuid"] == device["uuid"]
+    assert devices[0]["device_name"] == device["device_name"]
+
+
 def test_get_group(client: TestClient) -> None:
     created = client.post(GROUPS_URL, json=group_payload()).json()
 

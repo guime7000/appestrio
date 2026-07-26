@@ -82,10 +82,18 @@ class GroupUpdate(SQLModel):
     calendar_id: UUID | None = None
 
 
+class GroupDevicePublic(SQLModel):
+    uuid: UUID
+    device_id: str
+    device_name: str
+    active: bool
+
+
 class GroupPublic(GroupBase):
     uuid: UUID
     calendar_id: UUID | None = None
     updated_at: datetime
+    devices: list[GroupDevicePublic] = []
 
 
 class GroupsPublic(SQLModel):

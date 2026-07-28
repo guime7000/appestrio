@@ -32,8 +32,10 @@ class Calendar(CalendarBase, table=True):
     groups: list[Group] = Relationship(back_populates="calendar")
 
 
-class CalendarCreate(CalendarBase):
-    pass
+class CalendarCreate(SQLModel):
+    label: str = Field(min_length=1, max_length=255)
+    presets: dict[str, Any] | None
+    days: dict[str, Any] | None
 
 
 class CalendarUpdate(SQLModel):
@@ -47,8 +49,14 @@ class CalendarPublic(CalendarBase):
     updated_at: datetime
 
 
+class CalendarSummaryPublic(SQLModel):
+    uuid: UUID
+    label: str
+    updated_at: datetime
+
+
 class CalendarsPublic(SQLModel):
-    data: list[CalendarPublic]
+    data: list[CalendarSummaryPublic]
     count: int
 
 

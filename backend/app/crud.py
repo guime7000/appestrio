@@ -24,7 +24,11 @@ class DeviceNotFoundError(Exception):
 
 
 def create_calendar(*, session: Session, calendar_create: CalendarCreate) -> Calendar:
-    db_calendar = Calendar.model_validate(calendar_create)
+    db_calendar = Calendar(
+        label=calendar_create.label,
+        presets=calendar_create.presets or {},
+        days=calendar_create.days or {},
+    )
     session.add(db_calendar)
     session.commit()
     session.refresh(db_calendar)
@@ -47,6 +51,11 @@ def update_calendar(
     *, session: Session, db_calendar: Calendar, calendar_in: CalendarUpdate
 ) -> Calendar:
     update_data = calendar_in.model_dump(exclude_unset=True)
+    # presets/days are non-nullable on the table; treat an explicit null as
+    # "clear it" the same way create_calendar treats a null on creation.
+    for nullable_json_field in ("presets", "days"):
+        if nullable_json_field in update_data and update_data[nullable_json_field] is None:
+            update_data[nullable_json_field] = {}
     db_calendar.sqlmodel_update(update_data)
     db_calendar.updated_at = utcnow()
     session.add(db_calendar)

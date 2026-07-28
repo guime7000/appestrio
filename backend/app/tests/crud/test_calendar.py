@@ -19,6 +19,14 @@ def test_create_calendar(session: Session) -> None:
     assert calendar.updated_at is not None
 
 
+def test_create_calendar_with_null_presets_and_days(session: Session) -> None:
+    calendar_in = CalendarCreate(**calendar_payload(presets=None, days=None))
+    calendar = crud.create_calendar(session=session, calendar_create=calendar_in)
+
+    assert calendar.presets == {}
+    assert calendar.days == {}
+
+
 def test_get_calendar(session: Session) -> None:
     calendar = crud.create_calendar(
         session=session, calendar_create=CalendarCreate(**calendar_payload())
@@ -63,6 +71,20 @@ def test_update_calendar_partial(session: Session) -> None:
     # Untouched fields keep their value: PATCH is partial.
     assert updated.label == original_label
     assert updated.updated_at >= original_updated_at
+
+
+def test_update_calendar_null_presets_clears_it(session: Session) -> None:
+    calendar = crud.create_calendar(
+        session=session, calendar_create=CalendarCreate(**calendar_payload())
+    )
+
+    updated = crud.update_calendar(
+        session=session,
+        db_calendar=calendar,
+        calendar_in=CalendarUpdate(presets=None),
+    )
+
+    assert updated.presets == {}
 
 
 def test_delete_calendar(session: Session) -> None:

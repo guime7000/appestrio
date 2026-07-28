@@ -21,6 +21,72 @@ def test_create_calendar(client: TestClient) -> None:
     assert "updated_at" in content
 
 
+def test_create_calendar_requires_presets(client: TestClient) -> None:
+    payload = calendar_payload()
+    del payload["presets"]
+
+    response = client.post(CALENDARS_URL, json=payload)
+
+    assert response.status_code == 422
+
+
+def test_create_calendar_requires_days(client: TestClient) -> None:
+    payload = calendar_payload()
+    del payload["days"]
+
+    response = client.post(CALENDARS_URL, json=payload)
+
+    assert response.status_code == 422
+
+
+def test_create_calendar_accepts_null_presets_and_days(client: TestClient) -> None:
+    payload = calendar_payload(presets=None, days=None)
+
+    response = client.post(CALENDARS_URL, json=payload)
+
+    assert response.status_code == 201
+    content = response.json()
+    assert content["presets"] == {}
+    assert content["days"] == {}
+
+
+def test_list_calendars_only_exposes_summary_fields(client: TestClient) -> None:
+    client.post(CALENDARS_URL, json=calendar_payload(label="Calendar A"))
+
+    response = client.get(CALENDARS_URL)
+
+    assert response.status_code == 200
+    entry = response.json()["data"][0]
+    assert set(entry.keys()) == {"uuid", "label", "updated_at"}
+    assert entry["label"] == "Calendar A"
+
+
+def test_get_calendar_exposes_full_payload(client: TestClient) -> None:
+    created = client.post(
+        CALENDARS_URL, json=calendar_payload(label="Calendar A")
+    ).json()
+
+    response = client.get(f"{CALENDARS_URL}{created['uuid']}")
+
+    assert response.status_code == 200
+    content = response.json()
+    assert content["label"] == "Calendar A"
+    assert content["presets"]["setup1"]["start_time"] == "09:15"
+    assert content["days"]["lundi"] == "setup1"
+    assert "updated_at" in content
+
+
+def test_update_calendar_null_presets_clears_it(client: TestClient) -> None:
+    created = client.post(CALENDARS_URL, json=calendar_payload()).json()
+
+    response = client.patch(
+        f"{CALENDARS_URL}{created['uuid']}", json={"presets": None}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["presets"] == {}
+
+
 def test_get_calendar(client: TestClient) -> None:
     created = client.post(CALENDARS_URL, json=calendar_payload()).json()
 

@@ -1,0 +1,12 @@
+services:
+
+  # Local dev only: docker compose auto-merges this file into every
+  # `docker compose up`. Bind-mounts live source over what the image was
+  # built with, so edits (e.g. a response schema) show up after a page
+  # refresh with no rebuild. On the Pi / any real deploy, pin the base file
+  # explicitly (`docker compose -f compose.yml up -d --build`) so this
+  # override never applies there.
+  backend:
+    volumes:
+      - ./backend/app:/app/app
+    command: ["fastapi", "run", "--reload"]

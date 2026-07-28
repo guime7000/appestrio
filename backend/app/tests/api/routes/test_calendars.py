@@ -114,6 +114,30 @@ def test_list_calendars(client: TestClient) -> None:
     assert len(content["data"]) == 2
 
 
+def test_duplicate_calendar(client: TestClient) -> None:
+    created = client.post(
+        CALENDARS_URL, json=calendar_payload(label="calendar_example")
+    ).json()
+
+    response = client.post(f"{CALENDARS_URL}{created['uuid']}/duplicate")
+
+    assert response.status_code == 201
+    content = response.json()
+    assert content["uuid"] != created["uuid"]
+    assert content["label"] == "calendar_example copy"
+    assert content["presets"] == created["presets"]
+    assert content["days"] == created["days"]
+
+    list_response = client.get(CALENDARS_URL)
+    assert list_response.json()["count"] == 2
+
+
+def test_duplicate_calendar_not_found(client: TestClient) -> None:
+    response = client.post(f"{CALENDARS_URL}{uuid.uuid4()}/duplicate")
+
+    assert response.status_code == 404
+
+
 def test_update_calendar(client: TestClient) -> None:
     created = client.post(CALENDARS_URL, json=calendar_payload()).json()
 

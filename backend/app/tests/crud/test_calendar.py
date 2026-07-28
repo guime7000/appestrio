@@ -87,6 +87,31 @@ def test_update_calendar_null_presets_clears_it(session: Session) -> None:
     assert updated.presets == {}
 
 
+def test_duplicate_calendar(session: Session) -> None:
+    calendar = crud.create_calendar(
+        session=session,
+        calendar_create=CalendarCreate(**calendar_payload(label="calendar_example")),
+    )
+
+    duplicate = crud.duplicate_calendar(session=session, db_calendar=calendar)
+
+    assert duplicate.uuid != calendar.uuid
+    assert duplicate.label == "calendar_example copy"
+    assert duplicate.presets == calendar.presets
+    assert duplicate.days == calendar.days
+
+
+def test_duplicate_calendar_is_independent_copy(session: Session) -> None:
+    calendar = crud.create_calendar(
+        session=session, calendar_create=CalendarCreate(**calendar_payload())
+    )
+
+    duplicate = crud.duplicate_calendar(session=session, db_calendar=calendar)
+    duplicate.presets["setup1"]["start_time"] = "00:00"
+
+    assert calendar.presets["setup1"]["start_time"] != "00:00"
+
+
 def test_delete_calendar(session: Session) -> None:
     calendar = crud.create_calendar(
         session=session, calendar_create=CalendarCreate(**calendar_payload())

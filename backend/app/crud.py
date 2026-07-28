@@ -1,4 +1,5 @@
 import uuid
+from copy import deepcopy
 
 from sqlmodel import Session, func, select
 
@@ -37,6 +38,18 @@ def create_calendar(*, session: Session, calendar_create: CalendarCreate) -> Cal
 
 def get_calendar(*, session: Session, calendar_uuid: uuid.UUID) -> Calendar | None:
     return session.get(Calendar, calendar_uuid)
+
+
+def duplicate_calendar(*, session: Session, db_calendar: Calendar) -> Calendar:
+    duplicate = Calendar(
+        label=f"{db_calendar.label} copy",
+        presets=deepcopy(db_calendar.presets),
+        days=deepcopy(db_calendar.days),
+    )
+    session.add(duplicate)
+    session.commit()
+    session.refresh(duplicate)
+    return duplicate
 
 
 def get_calendars(

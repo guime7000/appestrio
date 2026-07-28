@@ -41,6 +41,12 @@ def create_calendar(session: SessionDep, calendar_in: CalendarCreate) -> Calenda
     return crud.create_calendar(session=session, calendar_create=calendar_in)
 
 
+@router.post("/{calendar_uuid}/duplicate", response_model=CalendarPublic, status_code=201)
+def duplicate_calendar(session: SessionDep, calendar_uuid: uuid.UUID) -> Calendar:
+    calendar = _get_calendar_or_404(session, calendar_uuid)
+    return crud.duplicate_calendar(session=session, db_calendar=calendar)
+
+
 @router.patch("/{calendar_uuid}", response_model=CalendarPublic)
 def update_calendar(
     session: SessionDep, calendar_uuid: uuid.UUID, calendar_in: CalendarUpdate

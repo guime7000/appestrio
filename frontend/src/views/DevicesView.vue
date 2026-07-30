@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
 import { devicesApi } from "@/api/devices";
 import type { DevicePublic } from "@/api/types";
@@ -8,10 +8,18 @@ const devices = ref<DevicePublic[]>([]);
 const newDeviceId = ref("");
 const newDeviceName = ref("");
 const error = ref<string | null>(null);
+const selectedUuids = ref<Set<string>>(new Set());
+
+const allSelected = computed(
+  () => devices.value.length > 0 && selectedUuids.value.size === devices.value.length,
+);
 
 async function loadDevices() {
   const result = await devicesApi.list();
   devices.value = result.data;
+  selectedUuids.value = new Set(
+    [...selectedUuids.value].filter((uuid) => devices.value.some((d) => d.uuid === uuid)),
+  );
 }
 
 async function createDevice() {
@@ -34,8 +42,22 @@ async function toggleActive(device: DevicePublic) {
   await loadDevices();
 }
 
-async function removeDevice(uuid: string) {
-  await devicesApi.delete(uuid);
+function toggleSelection(uuid: string) {
+  if (selectedUuids.value.has(uuid)) {
+    selectedUuids.value.delete(uuid);
+  } else {
+    selectedUuids.value.add(uuid);
+  }
+}
+
+function toggleSelectAll() {
+  selectedUuids.value = allSelected.value
+    ? new Set()
+    : new Set(devices.value.map((d) => d.uuid));
+}
+
+async function removeSelectedDevices() {
+  await devicesApi.delete([...selectedUuids.value]);
   await loadDevices();
 }
 
@@ -52,19 +74,34 @@ onMounted(loadDevices);
   </form>
   <p v-if="error" class="error">{{ error }}</p>
 
+  <div class="bulk-actions">
+    <button :disabled="selectedUuids.size === 0" @click="removeSelectedDevices">
+      Effacer la sélection ({{ selectedUuids.size }})
+    </button>
+  </div>
+
   <table>
     <thead>
       <tr>
+        <th>
+          <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" />
+        </th>
         <th>Nom de série</th>
         <th>Nom sur le projet</th>
         <th>Actif</th>
         <th>Groupe</th>
         <th>Calendrier</th>
-        <th></th>
       </tr>
     </thead>
     <tbody>
       <tr v-for="device in devices" :key="device.uuid">
+        <td>
+          <input
+            type="checkbox"
+            :checked="selectedUuids.has(device.uuid)"
+            @change="toggleSelection(device.uuid)"
+          />
+        </td>
         <td>{{ device.device_id }}</td>
         <td>{{ device.device_name }}</td>
         <td>
@@ -74,7 +111,6 @@ onMounted(loadDevices);
         </td>
         <td>{{ device.group ?? "—" }}</td>
         <td>{{ device.calendar?.label ?? "—" }}</td>
-        <td><button @click="removeDevice(device.uuid)">Effacer</button></td>
       </tr>
     </tbody>
   </table>

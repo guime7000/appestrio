@@ -1,19 +1,27 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
 import { calendarsApi } from "@/api/calendars";
 import type { CalendarPublic } from "@/api/types";
 
 const calendars = ref<CalendarPublic[]>([]);
 const newCalendarLabel = ref("");
+const selectedUuids = ref<Set<string>>(new Set());
 
 const duplicateModalOpen = ref(false);
 const duplicateSourceUuid = ref("");
 const duplicateLabel = ref("");
 
+const allSelected = computed(
+  () => calendars.value.length > 0 && selectedUuids.value.size === calendars.value.length,
+);
+
 async function loadCalendars() {
   const result = await calendarsApi.list();
   calendars.value = result.data;
+  selectedUuids.value = new Set(
+    [...selectedUuids.value].filter((uuid) => calendars.value.some((c) => c.uuid === uuid)),
+  );
 }
 
 async function createCalendar() {
@@ -22,8 +30,22 @@ async function createCalendar() {
   await loadCalendars();
 }
 
-async function removeCalendar(uuid: string) {
-  await calendarsApi.delete(uuid);
+function toggleSelection(uuid: string) {
+  if (selectedUuids.value.has(uuid)) {
+    selectedUuids.value.delete(uuid);
+  } else {
+    selectedUuids.value.add(uuid);
+  }
+}
+
+function toggleSelectAll() {
+  selectedUuids.value = allSelected.value
+    ? new Set()
+    : new Set(calendars.value.map((c) => c.uuid));
+}
+
+async function removeSelectedCalendars() {
+  await calendarsApi.delete([...selectedUuids.value]);
   await loadCalendars();
 }
 
@@ -55,19 +77,34 @@ onMounted(loadCalendars);
     <button type="submit">Créer un calendrier</button>
   </form>
 
+  <div class="bulk-actions">
+    <button :disabled="selectedUuids.size === 0" @click="removeSelectedCalendars">
+      Effacer la sélection ({{ selectedUuids.size }})
+    </button>
+  </div>
+
   <table>
     <thead>
       <tr>
+        <th>
+          <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" />
+        </th>
         <th>Nom du calendrier</th>
         <th></th>
       </tr>
     </thead>
     <tbody>
       <tr v-for="calendar in calendars" :key="calendar.uuid">
+        <td>
+          <input
+            type="checkbox"
+            :checked="selectedUuids.has(calendar.uuid)"
+            @change="toggleSelection(calendar.uuid)"
+          />
+        </td>
         <td>{{ calendar.label }}</td>
         <td>
           <button @click="openDuplicateModal(calendar)">Dupliquer</button>
-          <button @click="removeCalendar(calendar.uuid)">Effacer</button>
         </td>
       </tr>
     </tbody>

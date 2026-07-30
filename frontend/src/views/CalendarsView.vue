@@ -7,6 +7,10 @@ import type { CalendarPublic } from "@/api/types";
 const calendars = ref<CalendarPublic[]>([]);
 const newCalendarLabel = ref("");
 
+const duplicateModalOpen = ref(false);
+const duplicateSourceUuid = ref("");
+const duplicateLabel = ref("");
+
 async function loadCalendars() {
   const result = await calendarsApi.list();
   calendars.value = result.data;
@@ -20,6 +24,23 @@ async function createCalendar() {
 
 async function removeCalendar(uuid: string) {
   await calendarsApi.delete(uuid);
+  await loadCalendars();
+}
+
+function openDuplicateModal(calendar: CalendarPublic) {
+  duplicateSourceUuid.value = calendar.uuid;
+  duplicateLabel.value = `${calendar.label} copy`;
+  duplicateModalOpen.value = true;
+}
+
+function closeDuplicateModal() {
+  duplicateModalOpen.value = false;
+}
+
+async function confirmDuplicate() {
+  const duplicated = await calendarsApi.duplicate(duplicateSourceUuid.value);
+  await calendarsApi.update(duplicated.uuid, { label: duplicateLabel.value });
+  duplicateModalOpen.value = false;
   await loadCalendars();
 }
 
@@ -44,7 +65,10 @@ onMounted(loadCalendars);
     <tbody>
       <tr v-for="calendar in calendars" :key="calendar.uuid">
         <td>{{ calendar.label }}</td>
-        <td><button @click="removeCalendar(calendar.uuid)">Effacer</button></td>
+        <td>
+          <button @click="openDuplicateModal(calendar)">Dupliquer</button>
+          <button @click="removeCalendar(calendar.uuid)">Effacer</button>
+        </td>
       </tr>
     </tbody>
   </table>
@@ -53,6 +77,19 @@ onMounted(loadCalendars);
     L'édition des jours type / exceptions / plages horaires arrivera dans une
     prochaine itération.
   </p>
+
+  <div v-if="duplicateModalOpen" class="modal-backdrop" @click.self="closeDuplicateModal">
+    <div class="modal">
+      <h2>Dupliquer le calendrier</h2>
+      <form @submit.prevent="confirmDuplicate">
+        <input v-model="duplicateLabel" placeholder="Nom du calendrier" required />
+        <div class="modal-actions">
+          <button type="button" @click="closeDuplicateModal">Annuler</button>
+          <button type="submit">Mettre à jour</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -77,5 +114,28 @@ td {
 .note {
   color: #666;
   font-style: italic;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 6px;
+  min-width: 320px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
 }
 </style>

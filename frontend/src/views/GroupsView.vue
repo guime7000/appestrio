@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
 import { calendarsApi } from "@/api/calendars";
 import { devicesApi } from "@/api/devices";
@@ -12,6 +12,11 @@ const calendarLabels = ref<Record<string, string>>({});
 const newGroupLabel = ref("");
 const editingGroupUuid = ref<string | null>(null);
 const selectedDeviceUuids = ref<Set<string>>(new Set());
+const selectedGroupUuids = ref<Set<string>>(new Set());
+
+const allSelected = computed(
+  () => groups.value.length > 0 && selectedGroupUuids.value.size === groups.value.length,
+);
 
 async function loadAll() {
   const [groupsResult, devicesResult, calendarsResult] = await Promise.all([
@@ -23,6 +28,9 @@ async function loadAll() {
   allDevices.value = devicesResult.data;
   calendarLabels.value = Object.fromEntries(
     calendarsResult.data.map((c) => [c.uuid, c.label]),
+  );
+  selectedGroupUuids.value = new Set(
+    [...selectedGroupUuids.value].filter((uuid) => groups.value.some((g) => g.uuid === uuid)),
   );
 }
 
@@ -36,8 +44,22 @@ async function createGroup() {
   await loadAll();
 }
 
-async function removeGroup(uuid: string) {
-  await groupsApi.delete(uuid);
+function toggleGroupSelection(uuid: string) {
+  if (selectedGroupUuids.value.has(uuid)) {
+    selectedGroupUuids.value.delete(uuid);
+  } else {
+    selectedGroupUuids.value.add(uuid);
+  }
+}
+
+function toggleSelectAllGroups() {
+  selectedGroupUuids.value = allSelected.value
+    ? new Set()
+    : new Set(groups.value.map((g) => g.uuid));
+}
+
+async function removeSelectedGroups() {
+  await groupsApi.delete([...selectedGroupUuids.value]);
   await loadAll();
 }
 
@@ -84,9 +106,18 @@ onMounted(loadAll);
     <button type="submit">Créer un groupe</button>
   </form>
 
+  <div class="bulk-actions">
+    <button :disabled="selectedGroupUuids.size === 0" @click="removeSelectedGroups">
+      Effacer la sélection ({{ selectedGroupUuids.size }})
+    </button>
+  </div>
+
   <table>
     <thead>
       <tr>
+        <th>
+          <input type="checkbox" :checked="allSelected" @change="toggleSelectAllGroups" />
+        </th>
         <th>Nom du groupe</th>
         <th>Nombre de lumestrio</th>
         <th>Calendrier</th>
@@ -95,12 +126,18 @@ onMounted(loadAll);
     </thead>
     <tbody>
       <tr v-for="group in groups" :key="group.uuid">
+        <td>
+          <input
+            type="checkbox"
+            :checked="selectedGroupUuids.has(group.uuid)"
+            @change="toggleGroupSelection(group.uuid)"
+          />
+        </td>
         <td>{{ group.label }}</td>
         <td>{{ group.devices.length }}</td>
         <td>{{ calendarLabel(group) }}</td>
         <td>
           <button @click="openDevicePicker(group)">Associer des appareils</button>
-          <button @click="removeGroup(group.uuid)">Effacer</button>
         </td>
       </tr>
     </tbody>

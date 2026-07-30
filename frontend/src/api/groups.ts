@@ -14,7 +14,7 @@ export const groupsApi = {
   create: (payload: GroupCreate) => api.post<GroupPublic>("/groups/", payload),
   update: (uuid: string, payload: GroupUpdate) =>
     api.patch<GroupPublic>(`/groups/${uuid}`, payload),
-  delete: (uuid: string) => api.delete<{ message: string }>(`/groups/${uuid}`),
+  delete: (uuids: string[]) => api.delete<{ message: string }>("/groups/", { uuids }),
   setDevices: (uuid: string, deviceUuids: string[]) =>
     api.patch<Paginated<DevicePublic>>(`/groups/${uuid}/devices`, {
       device_uuids: deviceUuids,

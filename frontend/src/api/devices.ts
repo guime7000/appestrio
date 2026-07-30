@@ -8,5 +8,5 @@ export const devicesApi = {
   create: (payload: DeviceCreate) => api.post<DevicePublic>("/devices/", payload),
   update: (uuid: string, payload: DeviceUpdate) =>
     api.patch<DevicePublic>(`/devices/${uuid}`, payload),
-  delete: (uuid: string) => api.delete<{ message: string }>(`/devices/${uuid}`),
+  delete: (uuids: string[]) => api.delete<{ message: string }>("/devices/", { uuids }),
 };

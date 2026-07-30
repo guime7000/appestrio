@@ -106,14 +106,48 @@ def test_update_device_not_found(client: TestClient) -> None:
 def test_delete_device(client: TestClient) -> None:
     created = client.post(DEVICES_URL, json=device_payload()).json()
 
-    response = client.delete(f"{DEVICES_URL}{created['uuid']}")
+    response = client.request("DELETE", DEVICES_URL, json={"uuids": [created["uuid"]]})
     assert response.status_code == 200
+    assert response.json()["message"] == "1 device(s) deleted successfully"
 
     get_response = client.get(f"{DEVICES_URL}{created['uuid']}")
     assert get_response.status_code == 404
 
 
 def test_delete_device_not_found(client: TestClient) -> None:
-    response = client.delete(f"{DEVICES_URL}{uuid.uuid4()}")
+    response = client.request(
+        "DELETE", DEVICES_URL, json={"uuids": [str(uuid.uuid4())]}
+    )
 
     assert response.status_code == 404
+
+
+def test_delete_devices_requires_at_least_one_uuid(client: TestClient) -> None:
+    response = client.request("DELETE", DEVICES_URL, json={"uuids": []})
+
+    assert response.status_code == 422
+
+
+def test_delete_devices_bulk(client: TestClient) -> None:
+    first = client.post(DEVICES_URL, json=device_payload(device_id="lumestrio1")).json()
+    second = client.post(DEVICES_URL, json=device_payload(device_id="lumestrio2")).json()
+
+    response = client.request(
+        "DELETE", DEVICES_URL, json={"uuids": [first["uuid"], second["uuid"]]}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "2 device(s) deleted successfully"
+    assert client.get(DEVICES_URL).json()["count"] == 0
+
+
+def test_delete_devices_bulk_not_found(client: TestClient) -> None:
+    created = client.post(DEVICES_URL, json=device_payload()).json()
+    missing_uuid = str(uuid.uuid4())
+
+    response = client.request(
+        "DELETE", DEVICES_URL, json={"uuids": [created["uuid"], missing_uuid]}
+    )
+
+    assert response.status_code == 404
+    assert client.get(DEVICES_URL).json()["count"] == 1

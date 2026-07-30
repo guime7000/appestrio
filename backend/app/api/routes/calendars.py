@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from app import crud
 from app.api.deps import SessionDep
 from app.models import (
+    BulkDeleteRequest,
     Calendar,
     CalendarCreate,
     CalendarPublic,
@@ -57,13 +58,21 @@ def update_calendar(
     )
 
 
-@router.delete("/{calendar_uuid}", response_model=Message)
-def delete_calendar(session: SessionDep, calendar_uuid: uuid.UUID) -> Message:
-    calendar = _get_calendar_or_404(session, calendar_uuid)
-    if calendar.groups:
+@router.delete("/", response_model=Message)
+def delete_calendars(session: SessionDep, payload: BulkDeleteRequest) -> Message:
+    calendars = crud.get_calendars_by_uuids(session=session, uuids=payload.uuids)
+    missing = set(payload.uuids) - {calendar.uuid for calendar in calendars}
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Calendar(s) not found: {', '.join(str(u) for u in sorted(missing))}",
+        )
+    in_use = [calendar for calendar in calendars if calendar.groups]
+    if in_use:
         raise HTTPException(
             status_code=409,
-            detail="Calendar is still assigned to one or more groups",
+            detail="Calendar(s) still assigned to one or more groups: "
+            + ", ".join(str(calendar.uuid) for calendar in in_use),
         )
-    crud.delete_calendar(session=session, db_calendar=calendar)
-    return Message(message="Calendar deleted successfully")
+    crud.delete_calendars(session=session, db_calendars=calendars)
+    return Message(message=f"{len(calendars)} calendar(s) deleted successfully")

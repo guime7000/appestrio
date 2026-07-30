@@ -163,15 +163,20 @@ def test_update_calendar_not_found(client: TestClient) -> None:
 def test_delete_calendar(client: TestClient) -> None:
     created = client.post(CALENDARS_URL, json=calendar_payload()).json()
 
-    response = client.delete(f"{CALENDARS_URL}{created['uuid']}")
+    response = client.request(
+        "DELETE", CALENDARS_URL, json={"uuids": [created["uuid"]]}
+    )
     assert response.status_code == 200
+    assert response.json()["message"] == "1 calendar(s) deleted successfully"
 
     get_response = client.get(f"{CALENDARS_URL}{created['uuid']}")
     assert get_response.status_code == 404
 
 
 def test_delete_calendar_not_found(client: TestClient) -> None:
-    response = client.delete(f"{CALENDARS_URL}{uuid.uuid4()}")
+    response = client.request(
+        "DELETE", CALENDARS_URL, json={"uuids": [str(uuid.uuid4())]}
+    )
 
     assert response.status_code == 404
 
@@ -180,6 +185,44 @@ def test_delete_calendar_in_use_by_group(client: TestClient, session: Session) -
     calendar = create_calendar(session)
     create_group(session, calendar_id=calendar.uuid)
 
-    response = client.delete(f"{CALENDARS_URL}{calendar.uuid}")
+    response = client.request(
+        "DELETE", CALENDARS_URL, json={"uuids": [str(calendar.uuid)]}
+    )
 
     assert response.status_code == 409
+
+
+def test_delete_calendars_requires_at_least_one_uuid(client: TestClient) -> None:
+    response = client.request("DELETE", CALENDARS_URL, json={"uuids": []})
+
+    assert response.status_code == 422
+
+
+def test_delete_calendars_bulk(client: TestClient) -> None:
+    first = client.post(CALENDARS_URL, json=calendar_payload(label="Calendar A")).json()
+    second = client.post(CALENDARS_URL, json=calendar_payload(label="Calendar B")).json()
+
+    response = client.request(
+        "DELETE",
+        CALENDARS_URL,
+        json={"uuids": [first["uuid"], second["uuid"]]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "2 calendar(s) deleted successfully"
+    assert client.get(CALENDARS_URL).json()["count"] == 0
+
+
+def test_delete_calendars_bulk_not_found(client: TestClient) -> None:
+    created = client.post(CALENDARS_URL, json=calendar_payload()).json()
+    missing_uuid = str(uuid.uuid4())
+
+    response = client.request(
+        "DELETE",
+        CALENDARS_URL,
+        json={"uuids": [created["uuid"], missing_uuid]},
+    )
+
+    assert response.status_code == 404
+    # nothing should be deleted when part of the batch is invalid
+    assert client.get(CALENDARS_URL).json()["count"] == 1

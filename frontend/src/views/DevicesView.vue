@@ -10,6 +10,9 @@ const newDeviceName = ref("");
 const error = ref<string | null>(null);
 const selectedUuids = ref<Set<string>>(new Set());
 
+const detailModalOpen = ref(false);
+const detailDevice = ref<DevicePublic | null>(null);
+
 const allSelected = computed(
   () => devices.value.length > 0 && selectedUuids.value.size === devices.value.length,
 );
@@ -35,6 +38,15 @@ async function createDevice() {
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   }
+}
+
+async function openDetailModal(uuid: string) {
+  detailDevice.value = await devicesApi.get(uuid);
+  detailModalOpen.value = true;
+}
+
+function closeDetailModal() {
+  detailModalOpen.value = false;
 }
 
 async function toggleActive(device: DevicePublic) {
@@ -103,7 +115,11 @@ onMounted(loadDevices);
           />
         </td>
         <td>{{ device.device_id }}</td>
-        <td>{{ device.device_name }}</td>
+        <td>
+          <a href="#" class="item-link" @click.prevent="openDetailModal(device.uuid)">
+            {{ device.device_name }}
+          </a>
+        </td>
         <td>
           <button @click="toggleActive(device)">
             {{ device.active ? "ON" : "OFF" }}
@@ -114,6 +130,35 @@ onMounted(loadDevices);
       </tr>
     </tbody>
   </table>
+
+  <div v-if="detailModalOpen" class="modal-backdrop" @click.self="closeDetailModal">
+    <div class="modal" v-if="detailDevice">
+      <h2>{{ detailDevice.device_name }}</h2>
+      <dl class="detail-list">
+        <dt>Nom de série</dt>
+        <dd>{{ detailDevice.device_id }}</dd>
+        <dt>UUID</dt>
+        <dd>{{ detailDevice.uuid }}</dd>
+        <dt>Actif</dt>
+        <dd>{{ detailDevice.active ? "ON" : "OFF" }}</dd>
+        <dt>Groupe</dt>
+        <dd>{{ detailDevice.group ?? "—" }}</dd>
+        <dt>Calendrier</dt>
+        <dd>{{ detailDevice.calendar?.label ?? "—" }}</dd>
+        <dt>IP</dt>
+        <dd>{{ detailDevice.ip ?? "—" }}</dd>
+        <dt>IP du master</dt>
+        <dd>{{ detailDevice.master_ip ?? "—" }}</dd>
+        <dt>Fichier audio</dt>
+        <dd>{{ detailDevice.audiofile ?? "—" }}</dd>
+        <dt>Dernière modification</dt>
+        <dd>{{ detailDevice.updated_at }}</dd>
+      </dl>
+      <div class="modal-actions">
+        <button type="button" @click="closeDetailModal">Fermer</button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -137,5 +182,47 @@ td {
 
 .error {
   color: red;
+}
+
+.item-link {
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 6px;
+  min-width: 320px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.detail-list {
+  max-width: 480px;
+}
+
+.detail-list dt {
+  font-weight: bold;
+  margin-top: 0.75rem;
+}
+
+.detail-list dd {
+  margin: 0.25rem 0 0;
 }
 </style>

@@ -14,6 +14,9 @@ const editingGroupUuid = ref<string | null>(null);
 const selectedDeviceUuids = ref<Set<string>>(new Set());
 const selectedGroupUuids = ref<Set<string>>(new Set());
 
+const detailModalOpen = ref(false);
+const detailGroup = ref<GroupPublic | null>(null);
+
 const allSelected = computed(
   () => groups.value.length > 0 && selectedGroupUuids.value.size === groups.value.length,
 );
@@ -61,6 +64,15 @@ function toggleSelectAllGroups() {
 async function removeSelectedGroups() {
   await groupsApi.delete([...selectedGroupUuids.value]);
   await loadAll();
+}
+
+async function openDetailModal(uuid: string) {
+  detailGroup.value = await groupsApi.get(uuid);
+  detailModalOpen.value = true;
+}
+
+function closeDetailModal() {
+  detailModalOpen.value = false;
 }
 
 function openDevicePicker(group: GroupPublic) {
@@ -133,7 +145,11 @@ onMounted(loadAll);
             @change="toggleGroupSelection(group.uuid)"
           />
         </td>
-        <td>{{ group.label }}</td>
+        <td>
+          <a href="#" class="item-link" @click.prevent="openDetailModal(group.uuid)">
+            {{ group.label }}
+          </a>
+        </td>
         <td>{{ group.devices.length }}</td>
         <td>{{ calendarLabel(group) }}</td>
         <td>
@@ -156,6 +172,32 @@ onMounted(loadAll);
     <div class="picker-actions">
       <button @click="saveDeviceSelection">Enregistrer</button>
       <button @click="editingGroupUuid = null">Annuler</button>
+    </div>
+  </div>
+
+  <div v-if="detailModalOpen" class="modal-backdrop" @click.self="closeDetailModal">
+    <div class="modal" v-if="detailGroup">
+      <h2>{{ detailGroup.label }}</h2>
+      <dl class="detail-list">
+        <dt>UUID</dt>
+        <dd>{{ detailGroup.uuid }}</dd>
+        <dt>Dernière modification</dt>
+        <dd>{{ detailGroup.updated_at }}</dd>
+        <dt>Calendrier</dt>
+        <dd>{{ (detailGroup.calendar_id && calendarLabels[detailGroup.calendar_id]) || "—" }}</dd>
+        <dt>Appareils</dt>
+        <dd>
+          <span v-if="detailGroup.devices.length === 0">—</span>
+          <ul v-else>
+            <li v-for="device in detailGroup.devices" :key="device.uuid">
+              {{ device.device_name }}
+            </li>
+          </ul>
+        </dd>
+      </dl>
+      <div class="modal-actions">
+        <button type="button" @click="closeDetailModal">Fermer</button>
+      </div>
     </div>
   </div>
 </template>
@@ -195,5 +237,47 @@ td {
   margin-top: 1rem;
   display: flex;
   gap: 0.5rem;
+}
+
+.item-link {
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 6px;
+  min-width: 320px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.detail-list {
+  max-width: 480px;
+}
+
+.detail-list dt {
+  font-weight: bold;
+  margin-top: 0.75rem;
+}
+
+.detail-list dd {
+  margin: 0.25rem 0 0;
 }
 </style>

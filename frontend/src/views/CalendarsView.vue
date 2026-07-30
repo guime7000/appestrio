@@ -12,6 +12,9 @@ const duplicateModalOpen = ref(false);
 const duplicateSourceUuid = ref("");
 const duplicateLabel = ref("");
 
+const detailModalOpen = ref(false);
+const detailCalendar = ref<CalendarPublic | null>(null);
+
 const allSelected = computed(
   () => calendars.value.length > 0 && selectedUuids.value.size === calendars.value.length,
 );
@@ -47,6 +50,15 @@ function toggleSelectAll() {
 async function removeSelectedCalendars() {
   await calendarsApi.delete([...selectedUuids.value]);
   await loadCalendars();
+}
+
+async function openDetailModal(uuid: string) {
+  detailCalendar.value = await calendarsApi.get(uuid);
+  detailModalOpen.value = true;
+}
+
+function closeDetailModal() {
+  detailModalOpen.value = false;
 }
 
 function openDuplicateModal(calendar: CalendarPublic) {
@@ -102,7 +114,11 @@ onMounted(loadCalendars);
             @change="toggleSelection(calendar.uuid)"
           />
         </td>
-        <td>{{ calendar.label }}</td>
+        <td>
+          <a href="#" class="item-link" @click.prevent="openDetailModal(calendar.uuid)">
+            {{ calendar.label }}
+          </a>
+        </td>
         <td>
           <button @click="openDuplicateModal(calendar)">Dupliquer</button>
         </td>
@@ -125,6 +141,25 @@ onMounted(loadCalendars);
           <button type="submit">Mettre à jour</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div v-if="detailModalOpen" class="modal-backdrop" @click.self="closeDetailModal">
+    <div class="modal" v-if="detailCalendar">
+      <h2>{{ detailCalendar.label }}</h2>
+      <dl class="detail-list">
+        <dt>UUID</dt>
+        <dd>{{ detailCalendar.uuid }}</dd>
+        <dt>Dernière modification</dt>
+        <dd>{{ detailCalendar.updated_at }}</dd>
+        <dt>Jours type</dt>
+        <dd><pre>{{ JSON.stringify(detailCalendar.days, null, 2) }}</pre></dd>
+        <dt>Presets</dt>
+        <dd><pre>{{ JSON.stringify(detailCalendar.presets, null, 2) }}</pre></dd>
+      </dl>
+      <div class="modal-actions">
+        <button type="button" @click="closeDetailModal">Fermer</button>
+      </div>
     </div>
   </div>
 </template>
@@ -174,5 +209,31 @@ td {
   gap: 0.5rem;
   justify-content: flex-end;
   margin-top: 1rem;
+}
+
+.item-link {
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.detail-list {
+  max-width: 480px;
+}
+
+.detail-list dt {
+  font-weight: bold;
+  margin-top: 0.75rem;
+}
+
+.detail-list dd {
+  margin: 0.25rem 0 0;
+}
+
+.detail-list pre {
+  background: #f5f5f5;
+  padding: 0.5rem;
+  border-radius: 4px;
+  overflow-x: auto;
 }
 </style>

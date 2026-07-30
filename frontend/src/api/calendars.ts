@@ -13,5 +13,7 @@ export const calendarsApi = {
   create: (payload: CalendarCreate) => api.post<CalendarPublic>("/calendars/", payload),
   update: (uuid: string, payload: CalendarUpdate) =>
     api.patch<CalendarPublic>(`/calendars/${uuid}`, payload),
+  duplicate: (uuid: string) =>
+    api.post<CalendarPublic>(`/calendars/${uuid}/duplicate`, undefined),
   delete: (uuid: string) => api.delete<{ message: string }>(`/calendars/${uuid}`),
 };

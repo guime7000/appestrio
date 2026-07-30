@@ -1,42 +1,78 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 
 import { devicesApi } from "@/api/devices";
-import type { DevicePublic } from "@/api/types";
+import { groupsApi } from "@/api/groups";
+import type { DevicePublic, GroupPublic } from "@/api/types";
 
 const devices = ref<DevicePublic[]>([]);
-const newDeviceId = ref("");
-const newDeviceName = ref("");
-const error = ref<string | null>(null);
+const groups = ref<GroupPublic[]>([]);
 const selectedUuids = ref<Set<string>>(new Set());
 
 const detailModalOpen = ref(false);
 const detailDevice = ref<DevicePublic | null>(null);
+
+const createModalOpen = ref(false);
+const createError = ref<string | null>(null);
+const createForm = reactive({
+  device_id: "",
+  device_name: "",
+  active: true,
+  ip: "",
+  master_ip: "",
+  audiofile: "",
+  group_id: "",
+});
 
 const allSelected = computed(
   () => devices.value.length > 0 && selectedUuids.value.size === devices.value.length,
 );
 
 async function loadDevices() {
-  const result = await devicesApi.list();
-  devices.value = result.data;
+  const [devicesResult, groupsResult] = await Promise.all([devicesApi.list(), groupsApi.list()]);
+  devices.value = devicesResult.data;
+  groups.value = groupsResult.data;
   selectedUuids.value = new Set(
     [...selectedUuids.value].filter((uuid) => devices.value.some((d) => d.uuid === uuid)),
   );
 }
 
-async function createDevice() {
-  error.value = null;
+function openCreateModal() {
+  createError.value = null;
+  createForm.device_id = "";
+  createForm.device_name = "";
+  createForm.active = true;
+  createForm.ip = "";
+  createForm.master_ip = "";
+  createForm.audiofile = "";
+  createForm.group_id = "";
+  createModalOpen.value = true;
+}
+
+function closeCreateModal() {
+  createModalOpen.value = false;
+}
+
+async function submitCreateDevice() {
+  createError.value = null;
+  if (!createForm.device_id.trim() || !createForm.device_name.trim()) {
+    createError.value = "Le nom de série et le nom sur le projet sont obligatoires.";
+    return;
+  }
   try {
     await devicesApi.create({
-      device_id: newDeviceId.value,
-      device_name: newDeviceName.value,
+      device_id: createForm.device_id.trim(),
+      device_name: createForm.device_name.trim(),
+      active: createForm.active,
+      ip: createForm.ip.trim() || null,
+      master_ip: createForm.master_ip.trim() || null,
+      audiofile: createForm.audiofile.trim() || null,
+      group_id: createForm.group_id || null,
     });
-    newDeviceId.value = "";
-    newDeviceName.value = "";
+    createModalOpen.value = false;
     await loadDevices();
   } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err);
+    createError.value = err instanceof Error ? err.message : String(err);
   }
 }
 
@@ -79,17 +115,11 @@ onMounted(loadDevices);
 <template>
   <h1>Je gère les APPAREILS</h1>
 
-  <form class="create-form" @submit.prevent="createDevice">
-    <input v-model="newDeviceId" placeholder="Nom de série" required />
-    <input v-model="newDeviceName" placeholder="Nom sur le projet" required />
-    <button type="submit">Ajouter</button>
-  </form>
-  <p v-if="error" class="error">{{ error }}</p>
-
   <div class="bulk-actions">
     <button :disabled="selectedUuids.size === 0" @click="removeSelectedDevices">
       Effacer la sélection ({{ selectedUuids.size }})
     </button>
+    <button type="button" @click="openCreateModal">Créer un appareil</button>
   </div>
 
   <table>
@@ -159,15 +189,59 @@ onMounted(loadDevices);
       </dl>
     </div>
   </div>
+
+  <div v-if="createModalOpen" class="modal-backdrop" @click.self="closeCreateModal">
+    <div class="modal">
+      <button type="button" class="modal-close" aria-label="Fermer" @click="closeCreateModal">
+        ✕
+      </button>
+      <h2>Configurer un nouveau lumestrio</h2>
+      <p class="mandatory-hint">* Champ obligatoire</p>
+      <form class="create-device-form" @submit.prevent="submitCreateDevice">
+        <label>
+          Nom de série <span class="mandatory">*</span>
+          <input v-model="createForm.device_id" required />
+        </label>
+        <label>
+          Nom sur le projet <span class="mandatory">*</span>
+          <input v-model="createForm.device_name" required />
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" v-model="createForm.active" />
+          Actif
+        </label>
+        <label>
+          Groupe
+          <select v-model="createForm.group_id">
+            <option value="">—</option>
+            <option v-for="group in groups" :key="group.uuid" :value="group.uuid">
+              {{ group.label }}
+            </option>
+          </select>
+        </label>
+        <label>
+          IP
+          <input v-model="createForm.ip" />
+        </label>
+        <label>
+          IP du master
+          <input v-model="createForm.master_ip" />
+        </label>
+        <label>
+          Fichier audio
+          <input v-model="createForm.audiofile" />
+        </label>
+        <p v-if="createError" class="error">{{ createError }}</p>
+        <div class="modal-actions">
+          <button type="button" @click="closeCreateModal">Annuler</button>
+          <button type="submit">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.create-form {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
 table {
   border-collapse: collapse;
   width: 100%;
@@ -217,6 +291,44 @@ td {
   line-height: 1;
   cursor: pointer;
   padding: 0.25rem;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.mandatory-hint {
+  color: #666;
+  font-size: 0.85rem;
+  font-style: italic;
+  margin-top: -0.5rem;
+}
+
+.mandatory {
+  color: #c00;
+}
+
+.create-device-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 320px;
+}
+
+.create-device-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.create-device-form .checkbox-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .detail-list {

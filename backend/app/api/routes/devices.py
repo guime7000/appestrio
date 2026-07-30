@@ -74,13 +74,6 @@ def update_device(
     return crud.device_to_public(device)
 
 
-@router.delete("/{device_uuid}", response_model=Message)
-def delete_device(session: SessionDep, device_uuid: uuid.UUID) -> Message:
-    device = _get_device_or_404(session, device_uuid)
-    crud.delete_device(session=session, db_device=device)
-    return Message(message="Device deleted successfully")
-
-
 @router.delete("/", response_model=Message)
 def delete_devices(session: SessionDep, payload: BulkDeleteRequest) -> Message:
     devices = crud.get_devices_by_uuids(session=session, uuids=payload.uuids)

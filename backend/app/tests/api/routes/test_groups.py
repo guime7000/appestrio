@@ -115,15 +115,16 @@ def test_update_group_not_found(client: TestClient) -> None:
 def test_delete_group(client: TestClient) -> None:
     created = client.post(GROUPS_URL, json=group_payload()).json()
 
-    response = client.delete(f"{GROUPS_URL}{created['uuid']}")
+    response = client.request("DELETE", GROUPS_URL, json={"uuids": [created["uuid"]]})
     assert response.status_code == 200
+    assert response.json()["message"] == "1 group(s) deleted successfully"
 
     get_response = client.get(f"{GROUPS_URL}{created['uuid']}")
     assert get_response.status_code == 404
 
 
 def test_delete_group_not_found(client: TestClient) -> None:
-    response = client.delete(f"{GROUPS_URL}{uuid.uuid4()}")
+    response = client.request("DELETE", GROUPS_URL, json={"uuids": [str(uuid.uuid4())]})
 
     assert response.status_code == 404
 
@@ -132,9 +133,15 @@ def test_delete_group_in_use_by_device(client: TestClient, session: Session) -> 
     group = create_group(session)
     client.post(DEVICES_URL, json=device_payload(group_id=str(group.uuid)))
 
-    response = client.delete(f"{GROUPS_URL}{group.uuid}")
+    response = client.request("DELETE", GROUPS_URL, json={"uuids": [str(group.uuid)]})
 
     assert response.status_code == 409
+
+
+def test_delete_groups_requires_at_least_one_uuid(client: TestClient) -> None:
+    response = client.request("DELETE", GROUPS_URL, json={"uuids": []})
+
+    assert response.status_code == 422
 
 
 def test_delete_groups_bulk(client: TestClient) -> None:
@@ -159,20 +166,6 @@ def test_delete_groups_bulk_not_found(client: TestClient) -> None:
     )
 
     assert response.status_code == 404
-    assert client.get(GROUPS_URL).json()["count"] == 1
-
-
-def test_delete_groups_bulk_in_use_by_device(
-    client: TestClient, session: Session
-) -> None:
-    group = create_group(session)
-    client.post(DEVICES_URL, json=device_payload(group_id=str(group.uuid)))
-
-    response = client.request(
-        "DELETE", GROUPS_URL, json={"uuids": [str(group.uuid)]}
-    )
-
-    assert response.status_code == 409
     assert client.get(GROUPS_URL).json()["count"] == 1
 
 

@@ -78,18 +78,6 @@ def set_group_devices(
     )
 
 
-@router.delete("/{group_uuid}", response_model=Message)
-def delete_group(session: SessionDep, group_uuid: uuid.UUID) -> Message:
-    group = _get_group_or_404(session, group_uuid)
-    if group.devices:
-        raise HTTPException(
-            status_code=409,
-            detail="Group is still assigned to one or more devices",
-        )
-    crud.delete_group(session=session, db_group=group)
-    return Message(message="Group deleted successfully")
-
-
 @router.delete("/", response_model=Message)
 def delete_groups(session: SessionDep, payload: BulkDeleteRequest) -> Message:
     groups = crud.get_groups_by_uuids(session=session, uuids=payload.uuids)

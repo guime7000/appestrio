@@ -58,18 +58,6 @@ def update_calendar(
     )
 
 
-@router.delete("/{calendar_uuid}", response_model=Message)
-def delete_calendar(session: SessionDep, calendar_uuid: uuid.UUID) -> Message:
-    calendar = _get_calendar_or_404(session, calendar_uuid)
-    if calendar.groups:
-        raise HTTPException(
-            status_code=409,
-            detail="Calendar is still assigned to one or more groups",
-        )
-    crud.delete_calendar(session=session, db_calendar=calendar)
-    return Message(message="Calendar deleted successfully")
-
-
 @router.delete("/", response_model=Message)
 def delete_calendars(session: SessionDep, payload: BulkDeleteRequest) -> Message:
     calendars = crud.get_calendars_by_uuids(session=session, uuids=payload.uuids)

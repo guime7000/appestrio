@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlmodel import SQLModel
+from sqlmodel import Field, SQLModel
 
 
 def utcnow() -> datetime:
@@ -13,4 +13,4 @@ class Message(SQLModel):
 
 
 class BulkDeleteRequest(SQLModel):
-    uuids: list[UUID]
+    uuids: list[UUID] = Field(min_length=1)

@@ -82,6 +82,23 @@ def delete_calendar(*, session: Session, db_calendar: Calendar) -> None:
     session.commit()
 
 
+def get_calendars_by_uuids(
+    *, session: Session, uuids: list[uuid.UUID]
+) -> list[Calendar]:
+    unique_uuids = set(uuids)
+    return list(
+        session.exec(
+            select(Calendar).where(Calendar.uuid.in_(unique_uuids))  # type: ignore[attr-defined]
+        ).all()
+    )
+
+
+def delete_calendars(*, session: Session, db_calendars: list[Calendar]) -> None:
+    for db_calendar in db_calendars:
+        session.delete(db_calendar)
+    session.commit()
+
+
 def create_group(*, session: Session, group_create: GroupCreate) -> Group:
     db_group = Group.model_validate(group_create)
     session.add(db_group)
@@ -116,6 +133,21 @@ def update_group(
 
 def delete_group(*, session: Session, db_group: Group) -> None:
     session.delete(db_group)
+    session.commit()
+
+
+def get_groups_by_uuids(*, session: Session, uuids: list[uuid.UUID]) -> list[Group]:
+    unique_uuids = set(uuids)
+    return list(
+        session.exec(
+            select(Group).where(Group.uuid.in_(unique_uuids))  # type: ignore[attr-defined]
+        ).all()
+    )
+
+
+def delete_groups(*, session: Session, db_groups: list[Group]) -> None:
+    for db_group in db_groups:
+        session.delete(db_group)
     session.commit()
 
 
@@ -178,6 +210,21 @@ def update_device(
 
 def delete_device(*, session: Session, db_device: Device) -> None:
     session.delete(db_device)
+    session.commit()
+
+
+def get_devices_by_uuids(*, session: Session, uuids: list[uuid.UUID]) -> list[Device]:
+    unique_uuids = set(uuids)
+    return list(
+        session.exec(
+            select(Device).where(Device.uuid.in_(unique_uuids))  # type: ignore[attr-defined]
+        ).all()
+    )
+
+
+def delete_devices(*, session: Session, db_devices: list[Device]) -> None:
+    for db_device in db_devices:
+        session.delete(db_device)
     session.commit()
 
 

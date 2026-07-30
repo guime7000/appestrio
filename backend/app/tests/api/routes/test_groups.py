@@ -137,6 +137,45 @@ def test_delete_group_in_use_by_device(client: TestClient, session: Session) -> 
     assert response.status_code == 409
 
 
+def test_delete_groups_bulk(client: TestClient) -> None:
+    first = client.post(GROUPS_URL, json=group_payload(label="Group A")).json()
+    second = client.post(GROUPS_URL, json=group_payload(label="Group B")).json()
+
+    response = client.request(
+        "DELETE", GROUPS_URL, json={"uuids": [first["uuid"], second["uuid"]]}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "2 group(s) deleted successfully"
+    assert client.get(GROUPS_URL).json()["count"] == 0
+
+
+def test_delete_groups_bulk_not_found(client: TestClient) -> None:
+    created = client.post(GROUPS_URL, json=group_payload()).json()
+    missing_uuid = str(uuid.uuid4())
+
+    response = client.request(
+        "DELETE", GROUPS_URL, json={"uuids": [created["uuid"], missing_uuid]}
+    )
+
+    assert response.status_code == 404
+    assert client.get(GROUPS_URL).json()["count"] == 1
+
+
+def test_delete_groups_bulk_in_use_by_device(
+    client: TestClient, session: Session
+) -> None:
+    group = create_group(session)
+    client.post(DEVICES_URL, json=device_payload(group_id=str(group.uuid)))
+
+    response = client.request(
+        "DELETE", GROUPS_URL, json={"uuids": [str(group.uuid)]}
+    )
+
+    assert response.status_code == 409
+    assert client.get(GROUPS_URL).json()["count"] == 1
+
+
 def test_set_group_devices(client: TestClient, session: Session) -> None:
     group = create_group(session)
     device = client.post(DEVICES_URL, json=device_payload()).json()

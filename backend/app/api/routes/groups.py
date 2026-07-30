@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from app import crud
 from app.api.deps import SessionDep
 from app.models import (
+    BulkDeleteRequest,
     Calendar,
     DevicesPublic,
     Group,
@@ -87,3 +88,23 @@ def delete_group(session: SessionDep, group_uuid: uuid.UUID) -> Message:
         )
     crud.delete_group(session=session, db_group=group)
     return Message(message="Group deleted successfully")
+
+
+@router.delete("/", response_model=Message)
+def delete_groups(session: SessionDep, payload: BulkDeleteRequest) -> Message:
+    groups = crud.get_groups_by_uuids(session=session, uuids=payload.uuids)
+    missing = set(payload.uuids) - {group.uuid for group in groups}
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Group(s) not found: {', '.join(str(u) for u in sorted(missing))}",
+        )
+    in_use = [group for group in groups if group.devices]
+    if in_use:
+        raise HTTPException(
+            status_code=409,
+            detail="Group(s) still assigned to one or more devices: "
+            + ", ".join(str(group.uuid) for group in in_use),
+        )
+    crud.delete_groups(session=session, db_groups=groups)
+    return Message(message=f"{len(groups)} group(s) deleted successfully")

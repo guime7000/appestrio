@@ -9,7 +9,7 @@ from app.models.calendars import (
     CalendarSummaryPublic,
     CalendarUpdate,
 )
-from app.models.common import Message, utcnow
+from app.models.common import BulkDeleteRequest, Message, utcnow
 from app.models.devices import (
     Device,
     DeviceBase,
@@ -38,6 +38,7 @@ Device.model_rebuild(_types_namespace={"Group": Group})
 
 __all__ = [
     "SQLModel",
+    "BulkDeleteRequest",
     "Calendar",
     "CalendarBase",
     "CalendarCreate",

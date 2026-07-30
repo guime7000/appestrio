@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from app import crud
 from app.api.deps import SessionDep
 from app.models import (
+    BulkDeleteRequest,
     Device,
     DeviceCreate,
     DevicePublic,
@@ -78,3 +79,16 @@ def delete_device(session: SessionDep, device_uuid: uuid.UUID) -> Message:
     device = _get_device_or_404(session, device_uuid)
     crud.delete_device(session=session, db_device=device)
     return Message(message="Device deleted successfully")
+
+
+@router.delete("/", response_model=Message)
+def delete_devices(session: SessionDep, payload: BulkDeleteRequest) -> Message:
+    devices = crud.get_devices_by_uuids(session=session, uuids=payload.uuids)
+    missing = set(payload.uuids) - {device.uuid for device in devices}
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Device(s) not found: {', '.join(str(u) for u in sorted(missing))}",
+        )
+    crud.delete_devices(session=session, db_devices=devices)
+    return Message(message=f"{len(devices)} device(s) deleted successfully")

@@ -207,6 +207,9 @@ onMounted(loadAll);
 
   <div v-if="detailModalOpen" class="modal-backdrop" @click.self="closeDetailModal">
     <div class="modal" v-if="detailGroup">
+      <button type="button" class="modal-close" aria-label="Fermer" @click="closeDetailModal">
+        ✕
+      </button>
       <h2>{{ detailGroup.label }}</h2>
       <dl class="detail-list">
         <dt>UUID</dt>
@@ -225,9 +228,6 @@ onMounted(loadAll);
           </ul>
         </dd>
       </dl>
-      <div class="modal-actions">
-        <button type="button" @click="closeDetailModal">Fermer</button>
-      </div>
     </div>
   </div>
 </template>
@@ -316,10 +316,23 @@ td {
 }
 
 .modal {
+  position: relative;
   background: white;
   padding: 1.5rem;
   border-radius: 6px;
   min-width: 320px;
+}
+
+.modal-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.25rem;
 }
 
 .modal-actions {

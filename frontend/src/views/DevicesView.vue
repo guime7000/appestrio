@@ -133,6 +133,9 @@ onMounted(loadDevices);
 
   <div v-if="detailModalOpen" class="modal-backdrop" @click.self="closeDetailModal">
     <div class="modal" v-if="detailDevice">
+      <button type="button" class="modal-close" aria-label="Fermer" @click="closeDetailModal">
+        ✕
+      </button>
       <h2>{{ detailDevice.device_name }}</h2>
       <dl class="detail-list">
         <dt>Nom de série</dt>
@@ -154,9 +157,6 @@ onMounted(loadDevices);
         <dt>Dernière modification</dt>
         <dd>{{ detailDevice.updated_at }}</dd>
       </dl>
-      <div class="modal-actions">
-        <button type="button" @click="closeDetailModal">Fermer</button>
-      </div>
     </div>
   </div>
 </template>
@@ -200,17 +200,23 @@ td {
 }
 
 .modal {
+  position: relative;
   background: white;
   padding: 1.5rem;
   border-radius: 6px;
   min-width: 320px;
 }
 
-.modal-actions {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: flex-end;
-  margin-top: 1rem;
+.modal-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.25rem;
 }
 
 .detail-list {

@@ -31,6 +31,12 @@ def _check_group_exists(session: SessionDep, group_id: uuid.UUID | None) -> None
         raise HTTPException(status_code=404, detail="Group not found")
 
 
+def _conflict_detail(error: IntegrityError) -> str:
+    if "is_master" in str(error.orig):
+        return "Another device is already the master"
+    return "A device with this device_id already exists"
+
+
 @router.get("/", response_model=DevicesPublic)
 def list_devices(session: SessionDep, skip: int = 0, limit: int = 100) -> DevicesPublic:
     devices, count = crud.get_devices(session=session, skip=skip, limit=limit)
@@ -50,11 +56,9 @@ def create_device(session: SessionDep, device_in: DeviceCreate) -> DevicePublic:
     _check_group_exists(session, device_in.group_id)
     try:
         device = crud.create_device(session=session, device_create=device_in)
-    except IntegrityError:
+    except IntegrityError as exc:
         session.rollback()
-        raise HTTPException(
-            status_code=409, detail="A device with this device_id already exists"
-        )
+        raise HTTPException(status_code=409, detail=_conflict_detail(exc))
     return crud.device_to_public(device)
 
 
@@ -66,11 +70,9 @@ def update_device(
     _check_group_exists(session, device_in.group_id)
     try:
         device = crud.update_device(session=session, db_device=device, device_in=device_in)
-    except IntegrityError:
+    except IntegrityError as exc:
         session.rollback()
-        raise HTTPException(
-            status_code=409, detail="A device with this device_id already exists"
-        )
+        raise HTTPException(status_code=409, detail=_conflict_detail(exc))
     return crud.device_to_public(device)
 
 

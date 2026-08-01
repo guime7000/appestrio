@@ -19,6 +19,7 @@ def test_create_device(client: TestClient) -> None:
     assert content["group"] is None
     assert content["group_id"] is None
     assert content["calendar"] is None
+    assert content["is_master"] is False
     assert "uuid" in content
     assert "updated_at" in content
 
@@ -30,6 +31,27 @@ def test_create_device_duplicate_device_id(client: TestClient) -> None:
     response = client.post(DEVICES_URL, json=payload)
 
     assert response.status_code == 409
+
+
+def test_create_device_second_master_conflicts(client: TestClient) -> None:
+    client.post(DEVICES_URL, json=device_payload(is_master=True))
+
+    response = client.post(DEVICES_URL, json=device_payload(is_master=True))
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Another device is already the master"
+
+
+def test_update_device_to_master_conflicts_with_existing_master(
+    client: TestClient,
+) -> None:
+    client.post(DEVICES_URL, json=device_payload(is_master=True))
+    other = client.post(DEVICES_URL, json=device_payload()).json()
+
+    response = client.patch(f"{DEVICES_URL}{other['uuid']}", json={"is_master": True})
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Another device is already the master"
 
 
 def test_create_device_with_unknown_group(client: TestClient) -> None:

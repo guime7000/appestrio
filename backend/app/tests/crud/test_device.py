@@ -1,5 +1,7 @@
 import uuid
 
+import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 from app import crud
@@ -15,6 +17,7 @@ def test_create_device(session: Session) -> None:
     assert device.device_id == device_in.device_id
     assert device.device_name == device_in.device_name
     assert device.active is True
+    assert device.is_master is False
     assert device.created_at is not None
     assert device.updated_at is not None
 
@@ -42,6 +45,26 @@ def test_get_devices_pagination(session: Session) -> None:
 
     assert count == 3
     assert len(devices) == 2
+
+
+def test_only_one_device_can_be_master(session: Session) -> None:
+    crud.create_device(
+        session=session, device_create=DeviceCreate(**device_payload(is_master=True))
+    )
+
+    with pytest.raises(IntegrityError):
+        crud.create_device(
+            session=session, device_create=DeviceCreate(**device_payload(is_master=True))
+        )
+
+
+def test_multiple_devices_can_be_non_master(session: Session) -> None:
+    crud.create_device(
+        session=session, device_create=DeviceCreate(**device_payload(is_master=False))
+    )
+    crud.create_device(
+        session=session, device_create=DeviceCreate(**device_payload(is_master=False))
+    )
 
 
 def test_update_device_partial(session: Session) -> None:

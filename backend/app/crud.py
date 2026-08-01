@@ -236,6 +236,7 @@ def device_to_public(device: Device) -> DevicePublic:
         device_name=device.device_name,
         active=device.active,
         group=device.group.label if device.group else None,
+        group_id=device.group.uuid if device.group else None,
         calendar=CalendarPublic.model_validate(calendar) if calendar else None,
         audiofile=device.audiofile,
         ip=device.ip,

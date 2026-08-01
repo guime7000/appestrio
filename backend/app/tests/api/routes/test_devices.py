@@ -17,6 +17,7 @@ def test_create_device(client: TestClient) -> None:
     assert content["device_id"] == "lumestrio13"
     assert content["device_name"] == "Le 13e lumestrio"
     assert content["group"] is None
+    assert content["group_id"] is None
     assert content["calendar"] is None
     assert "uuid" in content
     assert "updated_at" in content
@@ -52,6 +53,7 @@ def test_create_device_with_group_and_calendar(
     assert response.status_code == 201
     content = response.json()
     assert content["group"] == "group A"
+    assert content["group_id"] == str(group.uuid)
     assert content["calendar"]["uuid"] == str(calendar.uuid)
 
 

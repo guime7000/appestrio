@@ -1,4 +1,8 @@
-from sqlmodel import SQLModel, create_engine
+from pathlib import Path
+
+from alembic.command import upgrade
+from alembic.config import Config
+from sqlmodel import create_engine
 
 from app.core.config import settings
 
@@ -15,9 +19,12 @@ engine = create_engine(
 # for more details: https://github.com/fastapi/full-stack-fastapi-template/issues/28
 from app import models  # noqa: E402, F401
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
 
 def init_db() -> None:
-    # No Alembic migrations exist yet, so create the tables directly from
-    # the SQLModel metadata. Switch to `alembic upgrade head` once migrations
-    # are introduced.
-    SQLModel.metadata.create_all(engine)
+    # Resolve paths explicitly (rather than relying on cwd) so this works
+    # regardless of where the process is started from.
+    alembic_cfg = Config(str(BACKEND_DIR / "alembic.ini"))
+    alembic_cfg.set_main_option("script_location", str(BACKEND_DIR / "app" / "alembic"))
+    upgrade(alembic_cfg, "head")

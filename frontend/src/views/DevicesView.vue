@@ -12,12 +12,14 @@ const selectedUuids = ref<Set<string>>(new Set());
 const detailModalOpen = ref(false);
 const detailDevice = ref<DevicePublic | null>(null);
 
-const createModalOpen = ref(false);
-const createError = ref<string | null>(null);
-const createForm = reactive({
+const formModalOpen = ref(false);
+const formError = ref<string | null>(null);
+const editingUuid = ref<string | null>(null);
+const deviceForm = reactive({
   device_id: "",
   device_name: "",
   active: true,
+  is_master: false,
   ip: "",
   master_ip: "",
   audiofile: "",
@@ -26,6 +28,10 @@ const createForm = reactive({
 
 const allSelected = computed(
   () => devices.value.length > 0 && selectedUuids.value.size === devices.value.length,
+);
+
+const existingMaster = computed(
+  () => devices.value.find((d) => d.is_master && d.uuid !== editingUuid.value) ?? null,
 );
 
 async function loadDevices() {
@@ -38,41 +44,64 @@ async function loadDevices() {
 }
 
 function openCreateModal() {
-  createError.value = null;
-  createForm.device_id = "";
-  createForm.device_name = "";
-  createForm.active = true;
-  createForm.ip = "";
-  createForm.master_ip = "";
-  createForm.audiofile = "";
-  createForm.group_id = "";
-  createModalOpen.value = true;
+  formError.value = null;
+  editingUuid.value = null;
+  deviceForm.device_id = "";
+  deviceForm.device_name = "";
+  deviceForm.active = true;
+  deviceForm.is_master = false;
+  deviceForm.ip = "";
+  deviceForm.master_ip = "";
+  deviceForm.audiofile = "";
+  deviceForm.group_id = "";
+  formModalOpen.value = true;
 }
 
-function closeCreateModal() {
-  createModalOpen.value = false;
+function openEditModal(device: DevicePublic) {
+  formError.value = null;
+  editingUuid.value = device.uuid;
+  deviceForm.device_id = device.device_id;
+  deviceForm.device_name = device.device_name;
+  deviceForm.active = device.active;
+  deviceForm.is_master = device.is_master;
+  deviceForm.ip = device.ip ?? "";
+  deviceForm.master_ip = device.master_ip ?? "";
+  deviceForm.audiofile = device.audiofile ?? "";
+  deviceForm.group_id = device.group_id ?? "";
+  detailModalOpen.value = false;
+  formModalOpen.value = true;
 }
 
-async function submitCreateDevice() {
-  createError.value = null;
-  if (!createForm.device_id.trim() || !createForm.device_name.trim()) {
-    createError.value = "Le nom de série et le nom sur le projet sont obligatoires.";
+function closeFormModal() {
+  formModalOpen.value = false;
+}
+
+async function submitDeviceForm() {
+  formError.value = null;
+  if (!deviceForm.device_id.trim() || !deviceForm.device_name.trim()) {
+    formError.value = "Le nom de série et le nom sur le projet sont obligatoires.";
     return;
   }
+  const payload = {
+    device_id: deviceForm.device_id.trim(),
+    device_name: deviceForm.device_name.trim(),
+    active: deviceForm.active,
+    is_master: deviceForm.is_master,
+    ip: deviceForm.ip.trim() || null,
+    master_ip: deviceForm.master_ip.trim() || null,
+    audiofile: deviceForm.audiofile.trim() || null,
+    group_id: deviceForm.group_id || null,
+  };
   try {
-    await devicesApi.create({
-      device_id: createForm.device_id.trim(),
-      device_name: createForm.device_name.trim(),
-      active: createForm.active,
-      ip: createForm.ip.trim() || null,
-      master_ip: createForm.master_ip.trim() || null,
-      audiofile: createForm.audiofile.trim() || null,
-      group_id: createForm.group_id || null,
-    });
-    createModalOpen.value = false;
+    if (editingUuid.value) {
+      await devicesApi.update(editingUuid.value, payload);
+    } else {
+      await devicesApi.create(payload);
+    }
+    formModalOpen.value = false;
     await loadDevices();
   } catch (err) {
-    createError.value = err instanceof Error ? err.message : String(err);
+    formError.value = err instanceof Error ? err.message : String(err);
   }
 }
 
@@ -83,6 +112,17 @@ async function openDetailModal(uuid: string) {
 
 function closeDetailModal() {
   detailModalOpen.value = false;
+}
+
+async function openMasterDetailFromForm(uuid: string) {
+  closeFormModal();
+  await openDetailModal(uuid);
+}
+
+async function unsetMaster(uuid: string) {
+  await devicesApi.update(uuid, { is_master: false });
+  await loadDevices();
+  detailDevice.value = await devicesApi.get(uuid);
 }
 
 async function toggleActive(device: DevicePublic) {
@@ -179,6 +219,13 @@ onMounted(loadDevices);
         <dd>{{ detailDevice.uuid }}</dd>
         <dt>Actif</dt>
         <dd>{{ detailDevice.active ? "ON" : "OFF" }}</dd>
+        <dt>Maître</dt>
+        <dd>
+          {{ detailDevice.is_master ? "Oui" : "Non" }}
+          <button v-if="detailDevice.is_master" type="button" @click="unsetMaster(detailDevice.uuid)">
+            Retirer le statut de maître
+          </button>
+        </dd>
         <dt>Groupe</dt>
         <dd>{{ detailDevice.group ?? "—" }}</dd>
         <dt>Calendrier</dt>
@@ -192,32 +239,45 @@ onMounted(loadDevices);
         <dt>Dernière modification</dt>
         <dd>{{ detailDevice.updated_at }}</dd>
       </dl>
+      <div class="modal-actions">
+        <button type="button" @click="openEditModal(detailDevice)">Mettre à jour</button>
+      </div>
     </div>
   </div>
 
-  <div v-if="createModalOpen" class="modal-backdrop" @click.self="closeCreateModal">
+  <div v-if="formModalOpen" class="modal-backdrop" @click.self="closeFormModal">
     <div class="modal">
-      <button type="button" class="modal-close" aria-label="Fermer" @click="closeCreateModal">
+      <button type="button" class="modal-close" aria-label="Fermer" @click="closeFormModal">
         ✕
       </button>
-      <h2>Configurer un nouveau lumestrio</h2>
+      <h2>{{ editingUuid ? "Modifier le lumestrio" : "Configurer un nouveau lumestrio" }}</h2>
       <p class="mandatory-hint">* Champ obligatoire</p>
-      <form class="create-device-form" @submit.prevent="submitCreateDevice">
+      <form class="create-device-form" @submit.prevent="submitDeviceForm">
         <label>
           Nom de série <span class="mandatory">*</span>
-          <input v-model="createForm.device_id" required />
+          <input v-model="deviceForm.device_id" required />
         </label>
         <label>
           Nom sur le projet <span class="mandatory">*</span>
-          <input v-model="createForm.device_name" required />
+          <input v-model="deviceForm.device_name" required />
         </label>
         <label class="checkbox-label">
-          <input type="checkbox" v-model="createForm.active" />
+          <input type="checkbox" v-model="deviceForm.active" />
           Actif
         </label>
+        <label class="checkbox-label">
+          <input type="checkbox" v-model="deviceForm.is_master" />
+          Maître
+        </label>
+        <p v-if="deviceForm.is_master && existingMaster" class="master-warning">
+          Un maître existe déjà : appareil
+          <a href="#" class="item-link" @click.prevent="openMasterDetailFromForm(existingMaster.uuid)">
+            {{ existingMaster.device_name }}
+          </a>
+        </p>
         <label>
           Groupe
-          <select v-model="createForm.group_id">
+          <select v-model="deviceForm.group_id">
             <option value="">—</option>
             <option v-for="group in groups" :key="group.uuid" :value="group.uuid">
               {{ group.label }}
@@ -226,20 +286,20 @@ onMounted(loadDevices);
         </label>
         <label>
           IP
-          <input v-model="createForm.ip" />
+          <input v-model="deviceForm.ip" />
         </label>
         <label>
           IP du master
-          <input v-model="createForm.master_ip" />
+          <input v-model="deviceForm.master_ip" />
         </label>
         <label>
           Fichier audio
-          <input v-model="createForm.audiofile" />
+          <input v-model="deviceForm.audiofile" />
         </label>
-        <p v-if="createError" class="error">{{ createError }}</p>
+        <p v-if="formError" class="error">{{ formError }}</p>
         <div class="modal-actions">
-          <button type="button" @click="closeCreateModal">Annuler</button>
-          <button type="submit">Enregistrer</button>
+          <button type="button" @click="closeFormModal">Annuler</button>
+          <button type="submit">{{ editingUuid ? "Mettre à jour" : "Enregistrer" }}</button>
         </div>
       </form>
     </div>
@@ -314,6 +374,15 @@ td {
 
 .mandatory {
   color: #c00;
+}
+
+.master-warning {
+  background: #fff4e5;
+  border: 1px solid #e0a94c;
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  margin: -0.25rem 0 0;
+  font-size: 0.85rem;
 }
 
 .create-device-form {

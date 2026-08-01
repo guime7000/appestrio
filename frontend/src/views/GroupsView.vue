@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute } from "vue-router";
 
 import { calendarsApi } from "@/api/calendars";
 import { devicesApi } from "@/api/devices";
 import { groupsApi } from "@/api/groups";
-import type { DevicePublic, GroupPublic } from "@/api/types";
+import type { CalendarPublic, DevicePublic, GroupPublic } from "@/api/types";
 
 const route = useRoute();
 
 const groups = ref<GroupPublic[]>([]);
 const allDevices = ref<DevicePublic[]>([]);
+const calendars = ref<CalendarPublic[]>([]);
 const calendarLabels = ref<Record<string, string>>({});
 const newGroupLabel = ref("");
 const editingGroupUuid = ref<string | null>(null);
@@ -20,6 +21,14 @@ const selectedGroupUuids = ref<Set<string>>(new Set());
 const detailModalOpen = ref(false);
 const detailGroup = ref<GroupPublic | null>(null);
 const expandedGroupUuids = ref<Set<string>>(new Set());
+
+const groupFormModalOpen = ref(false);
+const groupFormError = ref<string | null>(null);
+const groupFormUuid = ref<string | null>(null);
+const groupForm = reactive({
+  label: "",
+  calendar_id: "",
+});
 
 const allSelected = computed(
   () => groups.value.length > 0 && selectedGroupUuids.value.size === groups.value.length,
@@ -33,6 +42,7 @@ async function loadAll() {
   ]);
   groups.value = groupsResult.data;
   allDevices.value = devicesResult.data;
+  calendars.value = calendarsResult.data;
   calendarLabels.value = Object.fromEntries(
     calendarsResult.data.map((c) => [c.uuid, c.label]),
   );
@@ -77,6 +87,38 @@ async function openDetailModal(uuid: string) {
 
 function closeDetailModal() {
   detailModalOpen.value = false;
+}
+
+function openGroupFormModal(group: GroupPublic) {
+  groupFormError.value = null;
+  groupFormUuid.value = group.uuid;
+  groupForm.label = group.label;
+  groupForm.calendar_id = group.calendar_id ?? "";
+  detailModalOpen.value = false;
+  groupFormModalOpen.value = true;
+}
+
+function closeGroupFormModal() {
+  groupFormModalOpen.value = false;
+}
+
+async function submitGroupForm() {
+  groupFormError.value = null;
+  if (!groupForm.label.trim()) {
+    groupFormError.value = "Le nom du groupe est obligatoire.";
+    return;
+  }
+  if (!groupFormUuid.value) return;
+  try {
+    await groupsApi.update(groupFormUuid.value, {
+      label: groupForm.label.trim(),
+      calendar_id: groupForm.calendar_id || null,
+    });
+    groupFormModalOpen.value = false;
+    await loadAll();
+  } catch (err) {
+    groupFormError.value = err instanceof Error ? err.message : String(err);
+  }
 }
 
 function toggleExpand(uuid: string) {
@@ -237,6 +279,39 @@ onMounted(async () => {
           </ul>
         </dd>
       </dl>
+      <div class="modal-actions">
+        <button type="button" @click="openGroupFormModal(detailGroup)">Mettre à jour</button>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="groupFormModalOpen" class="modal-backdrop" @click.self="closeGroupFormModal">
+    <div class="modal">
+      <button type="button" class="modal-close" aria-label="Fermer" @click="closeGroupFormModal">
+        ✕
+      </button>
+      <h2>Modifier le groupe</h2>
+      <p class="mandatory-hint">* Champ obligatoire</p>
+      <form class="group-edit-form" @submit.prevent="submitGroupForm">
+        <label>
+          Nom du groupe <span class="mandatory">*</span>
+          <input v-model="groupForm.label" required />
+        </label>
+        <label>
+          Calendrier
+          <select v-model="groupForm.calendar_id">
+            <option value="">—</option>
+            <option v-for="calendar in calendars" :key="calendar.uuid" :value="calendar.uuid">
+              {{ calendar.label }}
+            </option>
+          </select>
+        </label>
+        <p v-if="groupFormError" class="error">{{ groupFormError }}</p>
+        <div class="modal-actions">
+          <button type="button" @click="closeGroupFormModal">Annuler</button>
+          <button type="submit">Mettre à jour</button>
+        </div>
+      </form>
     </div>
   </div>
 </template>
@@ -362,5 +437,34 @@ td {
 
 .detail-list dd {
   margin: 0.25rem 0 0;
+}
+
+.error {
+  color: red;
+}
+
+.mandatory-hint {
+  color: #666;
+  font-size: 0.85rem;
+  font-style: italic;
+  margin-top: -0.5rem;
+}
+
+.mandatory {
+  color: #c00;
+}
+
+.group-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 320px;
+}
+
+.group-edit-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
 }
 </style>

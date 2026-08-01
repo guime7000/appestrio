@@ -50,6 +50,7 @@ export interface DevicePublic {
   device_id: string;
   device_name: string;
   active: boolean;
+  is_master: boolean;
   group: string | null;
   group_id: string | null;
   calendar: CalendarPublic | null;
@@ -63,6 +64,7 @@ export interface DeviceCreate {
   device_id: string;
   device_name: string;
   active?: boolean;
+  is_master?: boolean;
   audiofile?: string | null;
   ip?: string | null;
   master_ip?: string | null;
@@ -73,6 +75,7 @@ export interface DeviceUpdate {
   device_id?: string;
   device_name?: string;
   active?: boolean;
+  is_master?: boolean;
   audiofile?: string | null;
   ip?: string | null;
   master_ip?: string | null;

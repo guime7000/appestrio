@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { useRoute } from "vue-router";
 
 import { calendarsApi } from "@/api/calendars";
 import { devicesApi } from "@/api/devices";
 import { groupsApi } from "@/api/groups";
 import type { DevicePublic, GroupPublic } from "@/api/types";
+
+const route = useRoute();
 
 const groups = ref<GroupPublic[]>([]);
 const allDevices = ref<DevicePublic[]>([]);
@@ -116,7 +119,13 @@ function editingGroupLabel(): string | undefined {
   return groups.value.find((g) => g.uuid === editingGroupUuid.value)?.label;
 }
 
-onMounted(loadAll);
+onMounted(async () => {
+  await loadAll();
+  const uuid = route.query.uuid;
+  if (typeof uuid === "string") {
+    await openDetailModal(uuid);
+  }
+});
 </script>
 
 <template>

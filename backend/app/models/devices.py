@@ -55,9 +55,11 @@ class DevicePublic(SQLModel):
     device_id: str
     device_name: str
     active: bool
-    # Denormalized for the client: the group's label (not its uuid), and the
-    # calendar reached through that group, per the Lumestrio spec payload.
+    # Denormalized for the client: the group's label and uuid (so the client
+    # can link to the group's detail), and the calendar reached through that
+    # group, per the Lumestrio spec payload.
     group: str | None = None
+    group_id: UUID | None = None
     calendar: CalendarPublic | None = None
     audiofile: str | None = None
     ip: str | None = None

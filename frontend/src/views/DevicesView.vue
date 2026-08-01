@@ -155,7 +155,12 @@ onMounted(loadDevices);
             {{ device.active ? "ON" : "OFF" }}
           </button>
         </td>
-        <td>{{ device.group ?? "—" }}</td>
+        <td>
+          <RouterLink v-if="device.group_id" :to="{ name: 'groups', query: { uuid: device.group_id } }">
+            {{ device.group }}
+          </RouterLink>
+          <span v-else>—</span>
+        </td>
         <td>{{ device.calendar?.label ?? "—" }}</td>
       </tr>
     </tbody>

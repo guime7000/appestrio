@@ -51,6 +51,7 @@ export interface DevicePublic {
   device_name: string;
   active: boolean;
   group: string | null;
+  group_id: string | null;
   calendar: CalendarPublic | null;
   audiofile: string | null;
   ip: string | null;

@@ -28,7 +28,7 @@ async function loadCalendars() {
 }
 
 async function createCalendar() {
-  await calendarsApi.create({ label: newCalendarLabel.value });
+  await calendarsApi.create({ label: newCalendarLabel.value, presets: {}, days: {} });
   newCalendarLabel.value = "";
   await loadCalendars();
 }

@@ -179,7 +179,7 @@ onMounted(async () => {
   </form>
 
   <div class="bulk-actions">
-    <button :disabled="selectedGroupUuids.size === 0" @click="removeSelectedGroups">
+    <button class="clear-selection" :disabled="selectedGroupUuids.size === 0" @click="removeSelectedGroups">
       Effacer la sélection ({{ selectedGroupUuids.size }})
     </button>
   </div>
@@ -317,6 +317,10 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.clear-selection:disabled {
+  color: var(--color-disabled-text);
+}
+
 .create-form {
   display: flex;
   gap: 0.5rem;
@@ -332,13 +336,13 @@ th,
 td {
   text-align: left;
   padding: 0.5rem;
-  border-bottom: 1px solid #ccc;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .picker {
   margin-top: 1rem;
   padding: 1rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
 }
 
@@ -380,7 +384,7 @@ td {
 }
 
 .expanded-row td {
-  background: #fafafa;
+  background: var(--color-surface-alt);
   padding-top: 0;
 }
 
@@ -393,7 +397,7 @@ td {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--color-backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -401,7 +405,8 @@ td {
 
 .modal {
   position: relative;
-  background: white;
+  background: var(--color-surface);
+  color: var(--color-text);
   padding: 1.5rem;
   border-radius: 6px;
   min-width: 320px;
@@ -413,6 +418,7 @@ td {
   right: 0.5rem;
   background: none;
   border: none;
+  color: var(--color-close-icon);
   font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
@@ -444,7 +450,7 @@ td {
 }
 
 .mandatory-hint {
-  color: #666;
+  color: var(--color-muted);
   font-size: 0.85rem;
   font-style: italic;
   margin-top: -0.5rem;

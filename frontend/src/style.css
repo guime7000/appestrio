@@ -1,6 +1,47 @@
 :root {
   color-scheme: light dark;
   font-family: system-ui, sans-serif;
+
+  --color-bg: #ffffff;
+  --color-text: #1a1a1a;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f5f5f5;
+  --color-border: #cccccc;
+  --color-muted: #666666;
+  --color-backdrop: rgba(0, 0, 0, 0.5);
+  --color-warning-bg: #fff4e5;
+  --color-warning-border: #e0a94c;
+  --color-close-icon: #c62828;
+  --color-disabled-text: inherit;
+}
+
+/* Follows the OS preference until the user picks an explicit theme below. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg: #121212;
+    --color-text: #e8e8e8;
+    --color-surface: #2b2b2b;
+    --color-surface-alt: #383838;
+    --color-border: #555555;
+    --color-muted: #a0a0a0;
+    --color-backdrop: rgba(0, 0, 0, 0.7);
+    --color-warning-bg: #4a3a1a;
+    --color-warning-border: #b8860b;
+    --color-disabled-text: #000000;
+  }
+}
+
+:root[data-theme="dark"] {
+  --color-bg: #121212;
+  --color-text: #e8e8e8;
+  --color-surface: #2b2b2b;
+  --color-surface-alt: #383838;
+  --color-border: #555555;
+  --color-muted: #a0a0a0;
+  --color-backdrop: rgba(0, 0, 0, 0.7);
+  --color-warning-bg: #4a3a1a;
+  --color-warning-border: #b8860b;
+  --color-disabled-text: #000000;
 }
 
 * {
@@ -9,4 +50,6 @@
 
 body {
   margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
 }

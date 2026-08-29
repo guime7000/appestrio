@@ -170,7 +170,7 @@ onMounted(loadDevices);
   <h1>Je gère les APPAREILS</h1>
 
   <div class="bulk-actions">
-    <button :disabled="selectedUuids.size === 0" @click="removeSelectedDevices">
+    <button class="clear-selection" :disabled="selectedUuids.size === 0" @click="removeSelectedDevices">
       Effacer la sélection ({{ selectedUuids.size }})
     </button>
     <button type="button" @click="openCreateModal">Créer un appareil</button>
@@ -358,6 +358,10 @@ onMounted(loadDevices);
 </template>
 
 <style scoped>
+.clear-selection:disabled {
+  color: var(--color-disabled-text);
+}
+
 table {
   border-collapse: collapse;
   width: 100%;
@@ -367,7 +371,7 @@ th,
 td {
   text-align: left;
   padding: 0.5rem;
-  border-bottom: 1px solid #ccc;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .error {
@@ -383,7 +387,7 @@ td {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--color-backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -391,7 +395,8 @@ td {
 
 .modal {
   position: relative;
-  background: white;
+  background: var(--color-surface);
+  color: var(--color-text);
   padding: 1.5rem;
   border-radius: 6px;
   min-width: 320px;
@@ -403,6 +408,7 @@ td {
   right: 0.5rem;
   background: none;
   border: none;
+  color: var(--color-close-icon);
   font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
@@ -417,7 +423,7 @@ td {
 }
 
 .mandatory-hint {
-  color: #666;
+  color: var(--color-muted);
   font-size: 0.85rem;
   font-style: italic;
   margin-top: -0.5rem;
@@ -428,8 +434,8 @@ td {
 }
 
 .master-warning {
-  background: #fff4e5;
-  border: 1px solid #e0a94c;
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
   border-radius: 4px;
   padding: 0.5rem 0.75rem;
   margin: -0.25rem 0 0;

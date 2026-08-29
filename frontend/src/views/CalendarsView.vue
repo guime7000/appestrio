@@ -90,7 +90,7 @@ onMounted(loadCalendars);
   </form>
 
   <div class="bulk-actions">
-    <button :disabled="selectedUuids.size === 0" @click="removeSelectedCalendars">
+    <button class="clear-selection" :disabled="selectedUuids.size === 0" @click="removeSelectedCalendars">
       Effacer la sélection ({{ selectedUuids.size }})
     </button>
   </div>
@@ -165,6 +165,10 @@ onMounted(loadCalendars);
 </template>
 
 <style scoped>
+.clear-selection:disabled {
+  color: var(--color-disabled-text);
+}
+
 .create-form {
   display: flex;
   gap: 0.5rem;
@@ -180,18 +184,18 @@ th,
 td {
   text-align: left;
   padding: 0.5rem;
-  border-bottom: 1px solid #ccc;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .note {
-  color: #666;
+  color: var(--color-muted);
   font-style: italic;
 }
 
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--color-backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -199,7 +203,8 @@ td {
 
 .modal {
   position: relative;
-  background: white;
+  background: var(--color-surface);
+  color: var(--color-text);
   padding: 1.5rem;
   border-radius: 6px;
   min-width: 320px;
@@ -211,6 +216,7 @@ td {
   right: 0.5rem;
   background: none;
   border: none;
+  color: var(--color-close-icon);
   font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
@@ -244,7 +250,7 @@ td {
 }
 
 .detail-list pre {
-  background: #f5f5f5;
+  background: var(--color-surface-alt);
   padding: 0.5rem;
   border-radius: 4px;
   overflow-x: auto;

@@ -170,10 +170,10 @@ onMounted(loadDevices);
   <h1>Je gère les APPAREILS</h1>
 
   <div class="bulk-actions">
+    <button type="button" @click="openCreateModal">Créer un appareil</button>
     <button class="clear-selection" :disabled="selectedUuids.size === 0" @click="removeSelectedDevices">
       Effacer la sélection ({{ selectedUuids.size }})
     </button>
-    <button type="button" @click="openCreateModal">Créer un appareil</button>
   </div>
 
   <table>
@@ -184,7 +184,7 @@ onMounted(loadDevices);
         </th>
         <th>Nom de série</th>
         <th>Nom sur le projet</th>
-        <th>Actif</th>
+        <th>Status</th>
         <th>Groupe</th>
         <th>Calendrier</th>
       </tr>
@@ -204,9 +204,12 @@ onMounted(loadDevices);
             {{ device.device_name }}
           </a>
         </td>
-        <td>
+        <td class="status-cell">
+          <span :class="device.active ? 'icon-ok' : 'icon-ko'">
+            {{ device.active ? "✓" : "✗" }}
+          </span>
           <button @click="toggleActive(device)">
-            {{ device.active ? "ON" : "OFF" }}
+            {{ device.active ? "Éteindre" : "Allumer" }}
           </button>
         </td>
         <td>
@@ -358,6 +361,14 @@ onMounted(loadDevices);
 </template>
 
 <style scoped>
+.bulk-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
 .clear-selection:disabled {
   color: var(--color-disabled-text);
 }
@@ -365,6 +376,12 @@ onMounted(loadDevices);
 table {
   border-collapse: collapse;
   width: 100%;
+}
+
+.status-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 th,

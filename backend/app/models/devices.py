@@ -3,6 +3,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID, uuid4
 
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy import Index, text
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -21,7 +22,14 @@ class DeviceType(str, Enum):
 class DeviceBase(SQLModel):
     device_id: str = Field(index=True, unique=True, min_length=1, max_length=255)
     device_name: str = Field(min_length=1, max_length=255)
-    device_type: DeviceType
+    # values_callable stores/reads the enum's *value* ("lumestrio") instead of
+    # SQLAlchemy's default of the member *name* ("LUMESTRIO"), matching the
+    # lowercase strings the API and the migration's backfill both use.
+    device_type: DeviceType = Field(
+        sa_type=SAEnum(
+            DeviceType, values_callable=lambda enum: [e.value for e in enum], name="devicetype"
+        )
+    )
     active: bool = Field(default=True)
     is_master: bool = Field(default=False)
     audiofile: str | None = Field(default=None, max_length=255)

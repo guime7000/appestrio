@@ -3,7 +3,9 @@ import { computed, onMounted, reactive, ref } from "vue";
 
 import { devicesApi } from "@/api/devices";
 import { groupsApi } from "@/api/groups";
-import type { DevicePublic, GroupPublic } from "@/api/types";
+import type { DevicePublic, DeviceType, GroupPublic } from "@/api/types";
+
+const deviceTypes: DeviceType[] = ["lumestrio", "relaystrio"];
 
 const devices = ref<DevicePublic[]>([]);
 const groups = ref<GroupPublic[]>([]);
@@ -18,6 +20,7 @@ const editingUuid = ref<string | null>(null);
 const deviceForm = reactive({
   device_id: "",
   device_name: "",
+  device_type: "lumestrio" as DeviceType,
   active: true,
   is_master: false,
   ip: "",
@@ -48,6 +51,7 @@ function openCreateModal() {
   editingUuid.value = null;
   deviceForm.device_id = "";
   deviceForm.device_name = "";
+  deviceForm.device_type = "lumestrio";
   deviceForm.active = true;
   deviceForm.is_master = false;
   deviceForm.ip = "";
@@ -62,6 +66,7 @@ function openEditModal(device: DevicePublic) {
   editingUuid.value = device.uuid;
   deviceForm.device_id = device.device_id;
   deviceForm.device_name = device.device_name;
+  deviceForm.device_type = device.device_type;
   deviceForm.active = device.active;
   deviceForm.is_master = device.is_master;
   deviceForm.ip = device.ip ?? "";
@@ -85,6 +90,7 @@ async function submitDeviceForm() {
   const payload = {
     device_id: deviceForm.device_id.trim(),
     device_name: deviceForm.device_name.trim(),
+    device_type: deviceForm.device_type,
     active: deviceForm.active,
     is_master: deviceForm.is_master,
     ip: deviceForm.ip.trim() || null,
@@ -215,6 +221,8 @@ onMounted(loadDevices);
       <dl class="detail-list">
         <dt>Nom de série</dt>
         <dd>{{ detailDevice.device_id }}</dd>
+        <dt>Type d'appareil</dt>
+        <dd>{{ detailDevice.device_type }}</dd>
         <dt>UUID</dt>
         <dd>{{ detailDevice.uuid }}</dd>
         <dt>Actif</dt>
@@ -260,6 +268,14 @@ onMounted(loadDevices);
         <label>
           Nom sur le projet <span class="mandatory">*</span>
           <input v-model="deviceForm.device_name" required />
+        </label>
+        <label>
+          Type d'appareil <span class="mandatory">*</span>
+          <select v-model="deviceForm.device_type" required>
+            <option v-for="type in deviceTypes" :key="type" :value="type">
+              {{ type }}
+            </option>
+          </select>
         </label>
         <label class="checkbox-label">
           <input type="checkbox" v-model="deviceForm.active" />

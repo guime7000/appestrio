@@ -45,10 +45,13 @@ export interface GroupUpdate {
   calendar_id?: string | null;
 }
 
+export type DeviceType = "lumestrio" | "relaystrio";
+
 export interface DevicePublic {
   uuid: string;
   device_id: string;
   device_name: string;
+  device_type: DeviceType;
   active: boolean;
   is_master: boolean;
   group: string | null;
@@ -63,6 +66,7 @@ export interface DevicePublic {
 export interface DeviceCreate {
   device_id: string;
   device_name: string;
+  device_type: DeviceType;
   active?: boolean;
   is_master?: boolean;
   audiofile?: string | null;
@@ -74,6 +78,7 @@ export interface DeviceCreate {
 export interface DeviceUpdate {
   device_id?: string;
   device_name?: string;
+  device_type?: DeviceType;
   active?: boolean;
   is_master?: boolean;
   audiofile?: string | null;

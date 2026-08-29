@@ -54,6 +54,8 @@ export interface DevicePublic {
   device_type: DeviceType;
   active: boolean;
   is_master: boolean;
+  handles_audio: boolean;
+  handles_dmx: boolean;
   group: string | null;
   group_id: string | null;
   calendar: CalendarPublic | null;
@@ -69,6 +71,8 @@ export interface DeviceCreate {
   device_type: DeviceType;
   active?: boolean;
   is_master?: boolean;
+  handles_audio?: boolean;
+  handles_dmx?: boolean;
   audiofile?: string | null;
   ip?: string | null;
   master_ip?: string | null;
@@ -81,6 +85,8 @@ export interface DeviceUpdate {
   device_type?: DeviceType;
   active?: boolean;
   is_master?: boolean;
+  handles_audio?: boolean;
+  handles_dmx?: boolean;
   audiofile?: string | null;
   ip?: string | null;
   master_ip?: string | null;

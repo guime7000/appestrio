@@ -32,6 +32,8 @@ class DeviceBase(SQLModel):
     )
     active: bool = Field(default=True)
     is_master: bool = Field(default=False)
+    handles_audio: bool = Field(default=False)
+    handles_dmx: bool = Field(default=False)
     audiofile: str | None = Field(default=None, max_length=255)
     ip: str | None = Field(default=None, max_length=45)
     master_ip: str | None = Field(default=None, max_length=45)
@@ -74,6 +76,8 @@ class DeviceUpdate(SQLModel):
     device_type: DeviceType | None = None
     active: bool | None = None
     is_master: bool | None = None
+    handles_audio: bool | None = None
+    handles_dmx: bool | None = None
     audiofile: str | None = None
     ip: str | None = None
     master_ip: str | None = None
@@ -87,6 +91,8 @@ class DevicePublic(SQLModel):
     device_type: DeviceType
     active: bool
     is_master: bool
+    handles_audio: bool
+    handles_dmx: bool
     # Denormalized for the client: the group's label and uuid (so the client
     # can link to the group's detail), and the calendar reached through that
     # group, per the Lumestrio spec payload.

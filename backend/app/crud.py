@@ -234,6 +234,7 @@ def device_to_public(device: Device) -> DevicePublic:
         uuid=device.uuid,
         device_id=device.device_id,
         device_name=device.device_name,
+        device_type=device.device_type,
         active=device.active,
         is_master=device.is_master,
         group=device.group.label if device.group else None,

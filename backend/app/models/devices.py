@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID, uuid4
 
@@ -12,9 +13,15 @@ if TYPE_CHECKING:
     from app.models.groups import Group
 
 
+class DeviceType(str, Enum):
+    LUMESTRIO = "lumestrio"
+    RELAYSTRIO = "relaystrio"
+
+
 class DeviceBase(SQLModel):
     device_id: str = Field(index=True, unique=True, min_length=1, max_length=255)
     device_name: str = Field(min_length=1, max_length=255)
+    device_type: DeviceType
     active: bool = Field(default=True)
     is_master: bool = Field(default=False)
     audiofile: str | None = Field(default=None, max_length=255)
@@ -56,6 +63,7 @@ class DeviceCreate(DeviceBase):
 class DeviceUpdate(SQLModel):
     device_id: str | None = Field(default=None, min_length=1, max_length=255)
     device_name: str | None = Field(default=None, min_length=1, max_length=255)
+    device_type: DeviceType | None = None
     active: bool | None = None
     is_master: bool | None = None
     audiofile: str | None = None
@@ -68,6 +76,7 @@ class DevicePublic(SQLModel):
     uuid: UUID
     device_id: str
     device_name: str
+    device_type: DeviceType
     active: bool
     is_master: bool
     # Denormalized for the client: the group's label and uuid (so the client

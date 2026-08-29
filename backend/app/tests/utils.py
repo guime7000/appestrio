@@ -58,6 +58,7 @@ def device_payload(**overrides: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "device_id": f"lumestrio-{uuid.uuid4().hex[:8]}",
         "device_name": "Le 13e lumestrio",
+        "device_type": "lumestrio",
         "active": True,
         "audiofile": "the audio.mp3",
         "ip": "127.0.0.13",

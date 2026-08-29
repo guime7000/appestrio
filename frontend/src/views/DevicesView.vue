@@ -23,6 +23,8 @@ const deviceForm = reactive({
   device_type: "lumestrio" as DeviceType,
   active: true,
   is_master: false,
+  handles_audio: false,
+  handles_dmx: false,
   ip: "",
   master_ip: "",
   audiofile: "",
@@ -54,6 +56,8 @@ function openCreateModal() {
   deviceForm.device_type = "lumestrio";
   deviceForm.active = true;
   deviceForm.is_master = false;
+  deviceForm.handles_audio = false;
+  deviceForm.handles_dmx = false;
   deviceForm.ip = "";
   deviceForm.master_ip = "";
   deviceForm.audiofile = "";
@@ -69,6 +73,8 @@ function openEditModal(device: DevicePublic) {
   deviceForm.device_type = device.device_type;
   deviceForm.active = device.active;
   deviceForm.is_master = device.is_master;
+  deviceForm.handles_audio = device.handles_audio;
+  deviceForm.handles_dmx = device.handles_dmx;
   deviceForm.ip = device.ip ?? "";
   deviceForm.master_ip = device.master_ip ?? "";
   deviceForm.audiofile = device.audiofile ?? "";
@@ -93,6 +99,8 @@ async function submitDeviceForm() {
     device_type: deviceForm.device_type,
     active: deviceForm.active,
     is_master: deviceForm.is_master,
+    handles_audio: deviceForm.device_type === "lumestrio" ? deviceForm.handles_audio : false,
+    handles_dmx: deviceForm.device_type === "lumestrio" ? deviceForm.handles_dmx : false,
     ip: deviceForm.ip.trim() || null,
     master_ip: deviceForm.master_ip.trim() || null,
     audiofile: deviceForm.audiofile.trim() || null,
@@ -234,6 +242,23 @@ onMounted(loadDevices);
             Retirer le statut de maître
           </button>
         </dd>
+        <template v-if="detailDevice.device_type === 'lumestrio'">
+          <dt>Options</dt>
+          <dd class="options-row">
+            <span class="option-status">
+              <span :class="detailDevice.handles_audio ? 'icon-ok' : 'icon-ko'">
+                {{ detailDevice.handles_audio ? "✓" : "✗" }}
+              </span>
+              Audio
+            </span>
+            <span class="option-status">
+              <span :class="detailDevice.handles_dmx ? 'icon-ok' : 'icon-ko'">
+                {{ detailDevice.handles_dmx ? "✓" : "✗" }}
+              </span>
+              DMX
+            </span>
+          </dd>
+        </template>
         <dt>Groupe</dt>
         <dd>{{ detailDevice.group ?? "—" }}</dd>
         <dt>Calendrier</dt>
@@ -285,6 +310,16 @@ onMounted(loadDevices);
           <input type="checkbox" v-model="deviceForm.is_master" />
           Maître
         </label>
+        <template v-if="deviceForm.device_type === 'lumestrio'">
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="deviceForm.handles_audio" />
+            Gère l'audio
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="deviceForm.handles_dmx" />
+            Gère le DMX
+          </label>
+        </template>
         <p v-if="deviceForm.is_master && existingMaster" class="master-warning">
           Un maître existe déjà : appareil
           <a href="#" class="item-link" @click.prevent="openMasterDetailFromForm(existingMaster.uuid)">
@@ -432,5 +467,26 @@ td {
 
 .detail-list dd {
   margin: 0.25rem 0 0;
+}
+
+.options-row {
+  display: flex;
+  gap: 1.25rem;
+}
+
+.option-status {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.icon-ok {
+  color: #2e7d32;
+  font-weight: bold;
+}
+
+.icon-ko {
+  color: #c62828;
+  font-weight: bold;
 }
 </style>

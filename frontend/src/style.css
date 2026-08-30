@@ -13,6 +13,7 @@
   --color-warning-border: #e0a94c;
   --color-close-icon: #c62828;
   --color-disabled-text: inherit;
+  --color-icon-strong: inherit;
 }
 
 /* Follows the OS preference until the user picks an explicit theme below. */
@@ -28,6 +29,7 @@
     --color-warning-bg: #4a3a1a;
     --color-warning-border: #b8860b;
     --color-disabled-text: #000000;
+    --color-icon-strong: #ffffff;
   }
 }
 
@@ -42,6 +44,7 @@
   --color-warning-bg: #4a3a1a;
   --color-warning-border: #b8860b;
   --color-disabled-text: #000000;
+  --color-icon-strong: #ffffff;
 }
 
 * {
@@ -52,4 +55,85 @@ body {
   margin: 0;
   background: var(--color-bg);
   color: var(--color-text);
+}
+
+/* Shared read-only detail-modal look, reused by the per-view CRUD modals
+   (which keep their own identical scoped copies) and by the read-only
+   cross-page detail modals under src/components/. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--color-backdrop);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal {
+  position: relative;
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 1.5rem;
+  border-radius: 6px;
+  min-width: 320px;
+}
+
+.modal-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--color-close-icon);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.25rem;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.detail-list {
+  max-width: 480px;
+}
+
+.detail-list dt {
+  font-weight: bold;
+  margin-top: 0.75rem;
+}
+
+.detail-list dd {
+  margin: 0.25rem 0 0;
+}
+
+.item-link {
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.options-row {
+  display: flex;
+  gap: 1.25rem;
+}
+
+.option-status {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.icon-ok {
+  color: #2e7d32;
+  font-weight: bold;
+}
+
+.icon-ko {
+  color: #c62828;
+  font-weight: bold;
 }

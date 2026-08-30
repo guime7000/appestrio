@@ -2,10 +2,17 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute } from "vue-router";
 
+import CalendarDetailModal from "@/components/CalendarDetailModal.vue";
+import DeviceDetailModal from "@/components/DeviceDetailModal.vue";
 import { calendarsApi } from "@/api/calendars";
 import { devicesApi } from "@/api/devices";
 import { groupsApi } from "@/api/groups";
-import type { CalendarSummaryPublic, DevicePublic, GroupPublic } from "@/api/types";
+import type {
+  CalendarPublic,
+  CalendarSummaryPublic,
+  DevicePublic,
+  GroupPublic,
+} from "@/api/types";
 
 const route = useRoute();
 
@@ -21,6 +28,12 @@ const selectedGroupUuids = ref<Set<string>>(new Set());
 const detailModalOpen = ref(false);
 const detailGroup = ref<GroupPublic | null>(null);
 const expandedGroupUuids = ref<Set<string>>(new Set());
+
+const deviceDetailModalOpen = ref(false);
+const deviceDetail = ref<DevicePublic | null>(null);
+
+const calendarDetailModalOpen = ref(false);
+const calendarDetail = ref<CalendarPublic | null>(null);
 
 const groupFormModalOpen = ref(false);
 const groupFormError = ref<string | null>(null);
@@ -87,6 +100,35 @@ async function openDetailModal(uuid: string) {
 
 function closeDetailModal() {
   detailModalOpen.value = false;
+}
+
+async function openDeviceDetailModal(uuid: string) {
+  deviceDetail.value = await devicesApi.get(uuid);
+  deviceDetailModalOpen.value = true;
+}
+
+function closeDeviceDetailModal() {
+  deviceDetailModalOpen.value = false;
+}
+
+async function openCalendarDetailModal(calendarUuid: string) {
+  calendarDetail.value = await calendarsApi.get(calendarUuid);
+  calendarDetailModalOpen.value = true;
+}
+
+function closeCalendarDetailModal() {
+  calendarDetailModalOpen.value = false;
+}
+
+function openCalendarFromDevice() {
+  // Already the full object (device.calendar === device.group.calendar on the
+  // backend), so no extra fetch needed here unlike the table/detail-modal
+  // entry points, which only ever have the calendar's uuid on hand.
+  if (deviceDetail.value?.calendar) {
+    calendarDetail.value = deviceDetail.value.calendar;
+    deviceDetailModalOpen.value = false;
+    calendarDetailModalOpen.value = true;
+  }
 }
 
 function openGroupFormModal(group: GroupPublic) {
@@ -221,7 +263,17 @@ onMounted(async () => {
             </button>
           </td>
           <td>{{ group.devices.length }}</td>
-          <td>{{ calendarLabel(group) }}</td>
+          <td>
+            <a
+              v-if="group.calendar_id"
+              href="#"
+              class="item-link"
+              @click.prevent="openCalendarDetailModal(group.calendar_id)"
+            >
+              {{ calendarLabel(group) }}
+            </a>
+            <span v-else>—</span>
+          </td>
           <td>
             <button @click="openDevicePicker(group)">Associer des appareils</button>
           </td>
@@ -231,7 +283,9 @@ onMounted(async () => {
           <td colspan="4">
             <ul class="device-list">
               <li v-for="device in group.devices" :key="device.uuid">
-                {{ device.device_name }}
+                <a href="#" class="item-link" @click.prevent="openDeviceDetailModal(device.uuid)">
+                  {{ device.device_name }}
+                </a>
               </li>
             </ul>
           </td>
@@ -268,13 +322,25 @@ onMounted(async () => {
         <dt>Dernière modification</dt>
         <dd>{{ detailGroup.updated_at }}</dd>
         <dt>Calendrier</dt>
-        <dd>{{ (detailGroup.calendar_id && calendarLabels[detailGroup.calendar_id]) || "—" }}</dd>
+        <dd>
+          <a
+            v-if="detailGroup.calendar_id"
+            href="#"
+            class="item-link"
+            @click.prevent="openCalendarDetailModal(detailGroup.calendar_id)"
+          >
+            {{ calendarLabels[detailGroup.calendar_id] ?? "—" }}
+          </a>
+          <span v-else>—</span>
+        </dd>
         <dt>Appareils</dt>
         <dd>
           <span v-if="detailGroup.devices.length === 0">—</span>
           <ul v-else>
             <li v-for="device in detailGroup.devices" :key="device.uuid">
-              {{ device.device_name }}
+              <a href="#" class="item-link" @click.prevent="openDeviceDetailModal(device.uuid)">
+                {{ device.device_name }}
+              </a>
             </li>
           </ul>
         </dd>
@@ -314,6 +380,19 @@ onMounted(async () => {
       </form>
     </div>
   </div>
+
+  <DeviceDetailModal
+    v-if="deviceDetailModalOpen && deviceDetail"
+    :device="deviceDetail"
+    @close="closeDeviceDetailModal"
+    @open-calendar="openCalendarFromDevice"
+  />
+
+  <CalendarDetailModal
+    v-if="calendarDetailModalOpen && calendarDetail"
+    :calendar="calendarDetail"
+    @close="closeCalendarDetailModal"
+  />
 </template>
 
 <style scoped>
@@ -366,6 +445,7 @@ td {
 .expand-toggle {
   background: none;
   border: none;
+  color: var(--color-icon-strong);
   cursor: pointer;
   padding: 0;
   margin-left: 0.5rem;

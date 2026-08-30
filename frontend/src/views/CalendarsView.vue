@@ -1,67 +1,168 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 
 import { calendarsApi } from "@/api/calendars";
-import type { CalendarPublic } from "@/api/types";
+import { ignitionPresetsApi } from "@/api/ignitionPresets";
+import type {
+  CalendarPublic,
+  CalendarSummaryPublic,
+  IgnitionPresetPublic,
+  Weekday,
+} from "@/api/types";
 
-const calendars = ref<CalendarPublic[]>([]);
-const newCalendarLabel = ref("");
-const selectedUuids = ref<Set<string>>(new Set());
+const WEEKDAY_OPTIONS: { value: Weekday; label: string }[] = [
+  { value: 1, label: "Lundi" },
+  { value: 2, label: "Mardi" },
+  { value: 3, label: "Mercredi" },
+  { value: 4, label: "Jeudi" },
+  { value: 5, label: "Vendredi" },
+  { value: 6, label: "Samedi" },
+  { value: 7, label: "Dimanche" },
+];
 
-const duplicateModalOpen = ref(false);
-const duplicateSourceUuid = ref("");
-const duplicateLabel = ref("");
+const DATE_PATTERN = /^\d{2}\/\d{2}\/\d{4}$/;
+const TIME_PATTERN = /^\d{2}:\d{2}$/;
 
-const detailModalOpen = ref(false);
-const detailCalendar = ref<CalendarPublic | null>(null);
+const calendars = ref<CalendarSummaryPublic[]>([]);
+const selectedCalendarUuids = ref<Set<string>>(new Set());
+const activeCalendarUuid = ref<string | null>(null);
+const activeCalendar = ref<CalendarPublic | null>(null);
 
 const allSelected = computed(
-  () => calendars.value.length > 0 && selectedUuids.value.size === calendars.value.length,
+  () =>
+    calendars.value.length > 0 && selectedCalendarUuids.value.size === calendars.value.length,
+);
+
+const calendarLabelByUuid = computed<Record<string, string>>(() =>
+  Object.fromEntries(calendars.value.map((c) => [c.uuid, c.label])),
 );
 
 async function loadCalendars() {
   const result = await calendarsApi.list();
   calendars.value = result.data;
-  selectedUuids.value = new Set(
-    [...selectedUuids.value].filter((uuid) => calendars.value.some((c) => c.uuid === uuid)),
+  selectedCalendarUuids.value = new Set(
+    [...selectedCalendarUuids.value].filter((uuid) =>
+      calendars.value.some((c) => c.uuid === uuid),
+    ),
   );
-}
-
-async function createCalendar() {
-  await calendarsApi.create({ label: newCalendarLabel.value, presets: {}, days: {} });
-  newCalendarLabel.value = "";
-  await loadCalendars();
-}
-
-function toggleSelection(uuid: string) {
-  if (selectedUuids.value.has(uuid)) {
-    selectedUuids.value.delete(uuid);
-  } else {
-    selectedUuids.value.add(uuid);
+  if (
+    activeCalendarUuid.value &&
+    !calendars.value.some((c) => c.uuid === activeCalendarUuid.value)
+  ) {
+    activeCalendarUuid.value = null;
+    activeCalendar.value = null;
   }
 }
 
-function toggleSelectAll() {
-  selectedUuids.value = allSelected.value
+async function selectCalendar(uuid: string) {
+  activeCalendarUuid.value = uuid;
+  activeCalendar.value = await calendarsApi.get(uuid);
+}
+
+async function refreshActiveCalendar() {
+  if (activeCalendarUuid.value) {
+    activeCalendar.value = await calendarsApi.get(activeCalendarUuid.value);
+  }
+}
+
+function weekdayLabels(weekdays: Weekday[]): string {
+  if (weekdays.length === 0) return "—";
+  return WEEKDAY_OPTIONS.filter((option) => weekdays.includes(option.value))
+    .map((option) => option.label)
+    .join(", ");
+}
+
+function toggleCalendarSelection(uuid: string) {
+  if (selectedCalendarUuids.value.has(uuid)) {
+    selectedCalendarUuids.value.delete(uuid);
+  } else {
+    selectedCalendarUuids.value.add(uuid);
+  }
+}
+
+function toggleSelectAllCalendars() {
+  selectedCalendarUuids.value = allSelected.value
     ? new Set()
     : new Set(calendars.value.map((c) => c.uuid));
 }
 
 async function removeSelectedCalendars() {
-  await calendarsApi.delete([...selectedUuids.value]);
+  await calendarsApi.delete([...selectedCalendarUuids.value]);
   await loadCalendars();
 }
 
-async function openDetailModal(uuid: string) {
-  detailCalendar.value = await calendarsApi.get(uuid);
-  detailModalOpen.value = true;
+// --- Calendar create/edit ---
+const calendarFormModalOpen = ref(false);
+const calendarFormError = ref<string | null>(null);
+const editingCalendarUuid = ref<string | null>(null);
+const calendarForm = reactive({
+  label: "",
+  weekdays: [] as Weekday[],
+});
+
+function toggleWeekday(value: Weekday) {
+  const index = calendarForm.weekdays.indexOf(value);
+  if (index === -1) {
+    calendarForm.weekdays.push(value);
+  } else {
+    calendarForm.weekdays.splice(index, 1);
+  }
 }
 
-function closeDetailModal() {
-  detailModalOpen.value = false;
+function openCreateCalendarModal() {
+  calendarFormError.value = null;
+  editingCalendarUuid.value = null;
+  calendarForm.label = "";
+  calendarForm.weekdays = [];
+  calendarFormModalOpen.value = true;
 }
 
-function openDuplicateModal(calendar: CalendarPublic) {
+function openEditCalendarModal(calendar: CalendarPublic) {
+  calendarFormError.value = null;
+  editingCalendarUuid.value = calendar.uuid;
+  calendarForm.label = calendar.label;
+  calendarForm.weekdays = [...calendar.weekdays];
+  calendarFormModalOpen.value = true;
+}
+
+async function editCalendar(uuid: string) {
+  openEditCalendarModal(await calendarsApi.get(uuid));
+}
+
+function closeCalendarFormModal() {
+  calendarFormModalOpen.value = false;
+}
+
+async function submitCalendarForm() {
+  calendarFormError.value = null;
+  if (!calendarForm.label.trim()) {
+    calendarFormError.value = "Le nom du calendrier est obligatoire.";
+    return;
+  }
+  const payload = {
+    label: calendarForm.label.trim(),
+    weekdays: calendarForm.weekdays,
+  };
+  try {
+    if (editingCalendarUuid.value) {
+      await calendarsApi.update(editingCalendarUuid.value, payload);
+    } else {
+      await calendarsApi.create(payload);
+    }
+    calendarFormModalOpen.value = false;
+    await loadCalendars();
+    await refreshActiveCalendar();
+  } catch (err) {
+    calendarFormError.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
+// --- Duplicate calendar ---
+const duplicateModalOpen = ref(false);
+const duplicateSourceUuid = ref("");
+const duplicateLabel = ref("");
+
+function openDuplicateModal(calendar: CalendarSummaryPublic) {
   duplicateSourceUuid.value = calendar.uuid;
   duplicateLabel.value = `${calendar.label} copy`;
   duplicateModalOpen.value = true;
@@ -78,58 +179,273 @@ async function confirmDuplicate() {
   await loadCalendars();
 }
 
+// --- Ignition preset (Allumage) create/edit/delete ---
+const presetFormModalOpen = ref(false);
+const presetFormError = ref<string | null>(null);
+const editingPresetUuid = ref<string | null>(null);
+const presetForm = reactive({
+  name: "",
+  description: "",
+  start_date: "",
+  stop_date: "",
+  start_time: "",
+  stop_time: "",
+  calendar_id: "",
+});
+
+function openCreatePresetModal() {
+  if (!activeCalendarUuid.value) return;
+  presetFormError.value = null;
+  editingPresetUuid.value = null;
+  presetForm.name = "";
+  presetForm.description = "";
+  presetForm.start_date = "";
+  presetForm.stop_date = "";
+  presetForm.start_time = "";
+  presetForm.stop_time = "";
+  presetForm.calendar_id = activeCalendarUuid.value;
+  presetFormModalOpen.value = true;
+}
+
+function openEditPresetModal(preset: IgnitionPresetPublic) {
+  presetFormError.value = null;
+  editingPresetUuid.value = preset.uuid;
+  presetForm.name = preset.name;
+  presetForm.description = preset.description ?? "";
+  presetForm.start_date = preset.start_date;
+  presetForm.stop_date = preset.stop_date;
+  presetForm.start_time = preset.start_time;
+  presetForm.stop_time = preset.stop_time;
+  presetForm.calendar_id = preset.calendar_id;
+  presetFormModalOpen.value = true;
+}
+
+function closePresetFormModal() {
+  presetFormModalOpen.value = false;
+}
+
+async function submitPresetForm() {
+  presetFormError.value = null;
+  if (!presetForm.name.trim()) {
+    presetFormError.value = "Le nom est obligatoire.";
+    return;
+  }
+  if (!DATE_PATTERN.test(presetForm.start_date) || !DATE_PATTERN.test(presetForm.stop_date)) {
+    presetFormError.value = "Les dates doivent être au format JJ/MM/AAAA.";
+    return;
+  }
+  if (!TIME_PATTERN.test(presetForm.start_time) || !TIME_PATTERN.test(presetForm.stop_time)) {
+    presetFormError.value = "Les heures doivent être au format HH:MM.";
+    return;
+  }
+  const payload = {
+    name: presetForm.name.trim(),
+    description: presetForm.description.trim() || null,
+    start_date: presetForm.start_date,
+    stop_date: presetForm.stop_date,
+    start_time: presetForm.start_time,
+    stop_time: presetForm.stop_time,
+    calendar_id: presetForm.calendar_id,
+  };
+  try {
+    if (editingPresetUuid.value) {
+      await ignitionPresetsApi.update(editingPresetUuid.value, payload);
+    } else {
+      await ignitionPresetsApi.create(payload);
+    }
+    presetFormModalOpen.value = false;
+    await refreshActiveCalendar();
+  } catch (err) {
+    presetFormError.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
+async function deletePreset(uuid: string) {
+  await ignitionPresetsApi.delete([uuid]);
+  await refreshActiveCalendar();
+}
+
+// --- Associate existing Allumages to the active calendar (multi-select) ---
+const associateModalOpen = ref(false);
+const associateError = ref<string | null>(null);
+const allPresets = ref<IgnitionPresetPublic[]>([]);
+const associateSelectedUuids = ref<Set<string>>(new Set());
+
+const availablePresetsToAssociate = computed(() =>
+  allPresets.value.filter((preset) => preset.calendar_id !== activeCalendarUuid.value),
+);
+
+async function openAssociateModal() {
+  if (!activeCalendarUuid.value) return;
+  associateError.value = null;
+  associateSelectedUuids.value = new Set();
+  const result = await ignitionPresetsApi.list();
+  allPresets.value = result.data;
+  associateModalOpen.value = true;
+}
+
+function closeAssociateModal() {
+  associateModalOpen.value = false;
+}
+
+function toggleAssociateSelection(uuid: string) {
+  if (associateSelectedUuids.value.has(uuid)) {
+    associateSelectedUuids.value.delete(uuid);
+  } else {
+    associateSelectedUuids.value.add(uuid);
+  }
+}
+
+async function confirmAssociate() {
+  if (!activeCalendarUuid.value) return;
+  associateError.value = null;
+  try {
+    for (const uuid of associateSelectedUuids.value) {
+      await ignitionPresetsApi.update(uuid, { calendar_id: activeCalendarUuid.value });
+    }
+    associateModalOpen.value = false;
+    await refreshActiveCalendar();
+  } catch (err) {
+    associateError.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
 onMounted(loadCalendars);
 </script>
 
 <template>
   <h1>Je gère les calendriers</h1>
 
-  <form class="create-form" @submit.prevent="createCalendar">
-    <input v-model="newCalendarLabel" placeholder="Nom du calendrier" required />
-    <button type="submit">Créer un calendrier</button>
-  </form>
+  <div class="calendars-layout">
+    <section class="calendars-panel">
+      <h2>Calendriers</h2>
+      <div class="bulk-actions">
+        <button type="button" @click="openCreateCalendarModal">Créer un calendrier</button>
+        <button
+          class="clear-selection"
+          :disabled="selectedCalendarUuids.size === 0"
+          @click="removeSelectedCalendars"
+        >
+          Effacer la sélection ({{ selectedCalendarUuids.size }})
+        </button>
+      </div>
 
-  <div class="bulk-actions">
-    <button class="clear-selection" :disabled="selectedUuids.size === 0" @click="removeSelectedCalendars">
-      Effacer la sélection ({{ selectedUuids.size }})
-    </button>
+      <table>
+        <thead>
+          <tr>
+            <th>
+              <input type="checkbox" :checked="allSelected" @change="toggleSelectAllCalendars" />
+            </th>
+            <th>Nom du calendrier</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="calendar in calendars"
+            :key="calendar.uuid"
+            :class="{ 'active-row': calendar.uuid === activeCalendarUuid }"
+          >
+            <td>
+              <input
+                type="checkbox"
+                :checked="selectedCalendarUuids.has(calendar.uuid)"
+                @change="toggleCalendarSelection(calendar.uuid)"
+              />
+            </td>
+            <td>
+              <a href="#" class="item-link" @click.prevent="selectCalendar(calendar.uuid)">
+                {{ calendar.label }}
+              </a>
+            </td>
+            <td class="row-actions">
+              <button type="button" @click="editCalendar(calendar.uuid)">Modifier</button>
+              <button type="button" @click="openDuplicateModal(calendar)">Dupliquer</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="presets-panel">
+      <template v-if="activeCalendar">
+        <h2>Allumages — {{ activeCalendar.label }}</h2>
+        <p class="note">Jours d'application : {{ weekdayLabels(activeCalendar.weekdays) }}</p>
+
+        <div class="bulk-actions">
+          <button type="button" @click="openCreatePresetModal">Créer un allumage</button>
+          <button type="button" @click="openAssociateModal">Associer des allumages</button>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Nom</th>
+              <th>Début</th>
+              <th>Fin</th>
+              <th>Horaires</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="preset in activeCalendar.ignition_presets" :key="preset.uuid">
+              <td>{{ preset.name }}</td>
+              <td>{{ preset.start_date }}</td>
+              <td>{{ preset.stop_date }}</td>
+              <td>{{ preset.start_time }} - {{ preset.stop_time }}</td>
+              <td class="row-actions">
+                <button type="button" @click="openEditPresetModal(preset)">Modifier</button>
+                <button type="button" @click="deletePreset(preset.uuid)">Supprimer</button>
+              </td>
+            </tr>
+            <tr v-if="activeCalendar.ignition_presets.length === 0">
+              <td colspan="5" class="note">Aucun allumage pour ce calendrier.</td>
+            </tr>
+          </tbody>
+        </table>
+      </template>
+      <p v-else class="note">
+        Sélectionnez un calendrier à gauche pour gérer ses allumages.
+      </p>
+    </section>
   </div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>
-          <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" />
-        </th>
-        <th>Nom du calendrier</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr v-for="calendar in calendars" :key="calendar.uuid">
-        <td>
-          <input
-            type="checkbox"
-            :checked="selectedUuids.has(calendar.uuid)"
-            @change="toggleSelection(calendar.uuid)"
-          />
-        </td>
-        <td>
-          <a href="#" class="item-link" @click.prevent="openDetailModal(calendar.uuid)">
-            {{ calendar.label }}
-          </a>
-        </td>
-        <td>
-          <button @click="openDuplicateModal(calendar)">Dupliquer</button>
-        </td>
-      </tr>
-    </tbody>
-  </table>
-
-  <p class="note">
-    L'édition des jours type / exceptions / plages horaires arrivera dans une
-    prochaine itération.
-  </p>
+  <div v-if="calendarFormModalOpen" class="modal-backdrop" @click.self="closeCalendarFormModal">
+    <div class="modal">
+      <button
+        type="button"
+        class="modal-close"
+        aria-label="Fermer"
+        @click="closeCalendarFormModal"
+      >
+        ✕
+      </button>
+      <h2>{{ editingCalendarUuid ? "Modifier le calendrier" : "Créer un calendrier" }}</h2>
+      <p class="mandatory-hint">* Champ obligatoire</p>
+      <form class="calendar-form" @submit.prevent="submitCalendarForm">
+        <label>
+          Nom du calendrier <span class="mandatory">*</span>
+          <input v-model="calendarForm.label" required />
+        </label>
+        <fieldset class="weekday-fieldset">
+          <legend>Jours d'application</legend>
+          <label v-for="option in WEEKDAY_OPTIONS" :key="option.value" class="checkbox-label">
+            <input
+              type="checkbox"
+              :checked="calendarForm.weekdays.includes(option.value)"
+              @change="toggleWeekday(option.value)"
+            />
+            {{ option.label }}
+          </label>
+        </fieldset>
+        <p v-if="calendarFormError" class="error">{{ calendarFormError }}</p>
+        <div class="modal-actions">
+          <button type="button" @click="closeCalendarFormModal">Annuler</button>
+          <button type="submit">{{ editingCalendarUuid ? "Mettre à jour" : "Enregistrer" }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <div v-if="duplicateModalOpen" class="modal-backdrop" @click.self="closeDuplicateModal">
     <div class="modal">
@@ -144,35 +460,118 @@ onMounted(loadCalendars);
     </div>
   </div>
 
-  <div v-if="detailModalOpen" class="modal-backdrop" @click.self="closeDetailModal">
-    <div class="modal" v-if="detailCalendar">
-      <button type="button" class="modal-close" aria-label="Fermer" @click="closeDetailModal">
+  <div v-if="presetFormModalOpen" class="modal-backdrop" @click.self="closePresetFormModal">
+    <div class="modal">
+      <button type="button" class="modal-close" aria-label="Fermer" @click="closePresetFormModal">
         ✕
       </button>
-      <h2>{{ detailCalendar.label }}</h2>
-      <dl class="detail-list">
-        <dt>UUID</dt>
-        <dd>{{ detailCalendar.uuid }}</dd>
-        <dt>Dernière modification</dt>
-        <dd>{{ detailCalendar.updated_at }}</dd>
-        <dt>Jours type</dt>
-        <dd><pre>{{ JSON.stringify(detailCalendar.days, null, 2) }}</pre></dd>
-        <dt>Presets</dt>
-        <dd><pre>{{ JSON.stringify(detailCalendar.presets, null, 2) }}</pre></dd>
-      </dl>
+      <h2>{{ editingPresetUuid ? "Modifier l'allumage" : "Créer un allumage" }}</h2>
+      <p class="mandatory-hint">* Champ obligatoire</p>
+      <form class="preset-form" @submit.prevent="submitPresetForm">
+        <label>
+          Nom <span class="mandatory">*</span>
+          <input v-model="presetForm.name" required />
+        </label>
+        <label>
+          Description
+          <input v-model="presetForm.description" />
+        </label>
+        <label>
+          Date de début <span class="mandatory">*</span>
+          <input v-model="presetForm.start_date" placeholder="JJ/MM/AAAA" required />
+        </label>
+        <label>
+          Date de fin <span class="mandatory">*</span>
+          <input v-model="presetForm.stop_date" placeholder="JJ/MM/AAAA" required />
+        </label>
+        <label>
+          Heure de début <span class="mandatory">*</span>
+          <input v-model="presetForm.start_time" placeholder="HH:MM" required />
+        </label>
+        <label>
+          Heure de fin <span class="mandatory">*</span>
+          <input v-model="presetForm.stop_time" placeholder="HH:MM" required />
+        </label>
+        <label v-if="editingPresetUuid">
+          Calendrier
+          <select v-model="presetForm.calendar_id">
+            <option v-for="calendar in calendars" :key="calendar.uuid" :value="calendar.uuid">
+              {{ calendar.label }}
+            </option>
+          </select>
+        </label>
+        <p v-if="presetFormError" class="error">{{ presetFormError }}</p>
+        <div class="modal-actions">
+          <button type="button" @click="closePresetFormModal">Annuler</button>
+          <button type="submit">{{ editingPresetUuid ? "Mettre à jour" : "Enregistrer" }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div v-if="associateModalOpen" class="modal-backdrop" @click.self="closeAssociateModal">
+    <div class="modal">
+      <button type="button" class="modal-close" aria-label="Fermer" @click="closeAssociateModal">
+        ✕
+      </button>
+      <h2>Associer des allumages</h2>
+      <p class="note">
+        Les allumages sélectionnés seront déplacés vers « {{ activeCalendar?.label }} ».
+      </p>
+      <div class="picker-list">
+        <label v-for="preset in availablePresetsToAssociate" :key="preset.uuid" class="picker-row">
+          <input
+            type="checkbox"
+            :checked="associateSelectedUuids.has(preset.uuid)"
+            @change="toggleAssociateSelection(preset.uuid)"
+          />
+          {{ preset.name }} (actuellement : {{ calendarLabelByUuid[preset.calendar_id] ?? "—" }})
+        </label>
+        <p v-if="availablePresetsToAssociate.length === 0" class="note">
+          Aucun autre allumage disponible.
+        </p>
+      </div>
+      <p v-if="associateError" class="error">{{ associateError }}</p>
+      <div class="modal-actions">
+        <button type="button" @click="closeAssociateModal">Annuler</button>
+        <button type="button" @click="confirmAssociate">Enregistrer</button>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.clear-selection:disabled {
-  color: var(--color-disabled-text);
+.calendars-layout {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
 }
 
-.create-form {
+.calendars-panel {
+  flex: 1 1 40%;
+  min-width: 320px;
+}
+
+.presets-panel {
+  flex: 1 1 60%;
+  min-width: 320px;
+}
+
+@media (max-width: 900px) {
+  .calendars-layout {
+    flex-direction: column;
+  }
+}
+
+.bulk-actions {
   display: flex;
   gap: 0.5rem;
   margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.clear-selection:disabled {
+  color: var(--color-disabled-text);
 }
 
 table {
@@ -187,9 +586,24 @@ td {
   border-bottom: 1px solid var(--color-border);
 }
 
+.active-row {
+  background: var(--color-surface-alt);
+}
+
+.row-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .note {
   color: var(--color-muted);
   font-style: italic;
+}
+
+.item-link {
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .modal-backdrop {
@@ -230,29 +644,67 @@ td {
   margin-top: 1rem;
 }
 
-.item-link {
-  color: inherit;
-  text-decoration: underline;
-  cursor: pointer;
+.mandatory-hint {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+  margin-top: -0.5rem;
 }
 
-.detail-list {
-  max-width: 480px;
+.mandatory {
+  color: #c00;
 }
 
-.detail-list dt {
-  font-weight: bold;
-  margin-top: 0.75rem;
+.error {
+  color: red;
 }
 
-.detail-list dd {
-  margin: 0.25rem 0 0;
+.calendar-form,
+.preset-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 320px;
 }
 
-.detail-list pre {
-  background: var(--color-surface-alt);
-  padding: 0.5rem;
+.calendar-form label,
+.preset-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.weekday-fieldset {
+  border: 1px solid var(--color-border);
   border-radius: 4px;
-  overflow-x: auto;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+.weekday-fieldset legend {
+  font-size: 0.85rem;
+  padding: 0 0.25rem;
+}
+
+.checkbox-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.picker-list {
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 1rem 0;
+}
+
+.picker-row {
+  display: block;
+  padding: 0.25rem 0;
 }
 </style>

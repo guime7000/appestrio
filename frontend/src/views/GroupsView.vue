@@ -5,13 +5,13 @@ import { useRoute } from "vue-router";
 import { calendarsApi } from "@/api/calendars";
 import { devicesApi } from "@/api/devices";
 import { groupsApi } from "@/api/groups";
-import type { CalendarPublic, DevicePublic, GroupPublic } from "@/api/types";
+import type { CalendarSummaryPublic, DevicePublic, GroupPublic } from "@/api/types";
 
 const route = useRoute();
 
 const groups = ref<GroupPublic[]>([]);
 const allDevices = ref<DevicePublic[]>([]);
-const calendars = ref<CalendarPublic[]>([]);
+const calendars = ref<CalendarSummaryPublic[]>([]);
 const calendarLabels = ref<Record<string, string>>({});
 const newGroupLabel = ref("");
 const editingGroupUuid = ref<string | null>(null);

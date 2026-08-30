@@ -2,13 +2,14 @@ import { api } from "@/api/client";
 import type {
   CalendarCreate,
   CalendarPublic,
+  CalendarSummaryPublic,
   CalendarUpdate,
   Paginated,
 } from "@/api/types";
 
 export const calendarsApi = {
   list: (skip = 0, limit = 100) =>
-    api.get<Paginated<CalendarPublic>>(`/calendars/?skip=${skip}&limit=${limit}`),
+    api.get<Paginated<CalendarSummaryPublic>>(`/calendars/?skip=${skip}&limit=${limit}`),
   get: (uuid: string) => api.get<CalendarPublic>(`/calendars/${uuid}`),
   create: (payload: CalendarCreate) => api.post<CalendarPublic>("/calendars/", payload),
   update: (uuid: string, payload: CalendarUpdate) =>

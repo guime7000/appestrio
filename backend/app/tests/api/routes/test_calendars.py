@@ -4,50 +4,45 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from app.core.config import settings
-from app.tests.utils import calendar_payload, create_calendar, create_group
+from app.tests.utils import (
+    calendar_payload,
+    create_calendar,
+    create_group,
+    create_ignition_preset,
+    ignition_preset_payload,
+)
 
 CALENDARS_URL = f"{settings.API_V1_STR}/calendars/"
+IGNITION_PRESETS_URL = f"{settings.API_V1_STR}/ignition-presets/"
 
 
 def test_create_calendar(client: TestClient) -> None:
-    response = client.post(CALENDARS_URL, json=calendar_payload(label="Calendar A"))
+    response = client.post(
+        CALENDARS_URL, json=calendar_payload(label="Calendar A", weekdays=[1, 3, 5])
+    )
 
     assert response.status_code == 201
     content = response.json()
     assert content["label"] == "Calendar A"
-    assert content["presets"]["setup1"]["start_time"] == "09:15"
-    assert content["days"]["lundi"] == "setup1"
+    assert content["weekdays"] == [1, 3, 5]
     assert "uuid" in content
     assert "updated_at" in content
 
 
-def test_create_calendar_requires_presets(client: TestClient) -> None:
+def test_create_calendar_defaults_weekdays_to_empty(client: TestClient) -> None:
     payload = calendar_payload()
-    del payload["presets"]
-
-    response = client.post(CALENDARS_URL, json=payload)
-
-    assert response.status_code == 422
-
-
-def test_create_calendar_requires_days(client: TestClient) -> None:
-    payload = calendar_payload()
-    del payload["days"]
-
-    response = client.post(CALENDARS_URL, json=payload)
-
-    assert response.status_code == 422
-
-
-def test_create_calendar_accepts_null_presets_and_days(client: TestClient) -> None:
-    payload = calendar_payload(presets=None, days=None)
+    del payload["weekdays"]
 
     response = client.post(CALENDARS_URL, json=payload)
 
     assert response.status_code == 201
-    content = response.json()
-    assert content["presets"] == {}
-    assert content["days"] == {}
+    assert response.json()["weekdays"] == []
+
+
+def test_create_calendar_rejects_invalid_weekday(client: TestClient) -> None:
+    response = client.post(CALENDARS_URL, json=calendar_payload(weekdays=[0]))
+
+    assert response.status_code == 422
 
 
 def test_list_calendars_only_exposes_summary_fields(client: TestClient) -> None:
@@ -61,30 +56,22 @@ def test_list_calendars_only_exposes_summary_fields(client: TestClient) -> None:
     assert entry["label"] == "Calendar A"
 
 
-def test_get_calendar_exposes_full_payload(client: TestClient) -> None:
+def test_get_calendar_exposes_full_payload_with_ignition_presets(
+    client: TestClient, session: Session
+) -> None:
     created = client.post(
         CALENDARS_URL, json=calendar_payload(label="Calendar A")
     ).json()
+    create_ignition_preset(session, calendar_id=uuid.UUID(created["uuid"]), name="preset A")
 
     response = client.get(f"{CALENDARS_URL}{created['uuid']}")
 
     assert response.status_code == 200
     content = response.json()
     assert content["label"] == "Calendar A"
-    assert content["presets"]["setup1"]["start_time"] == "09:15"
-    assert content["days"]["lundi"] == "setup1"
     assert "updated_at" in content
-
-
-def test_update_calendar_null_presets_clears_it(client: TestClient) -> None:
-    created = client.post(CALENDARS_URL, json=calendar_payload()).json()
-
-    response = client.patch(
-        f"{CALENDARS_URL}{created['uuid']}", json={"presets": None}
-    )
-
-    assert response.status_code == 200
-    assert response.json()["presets"] == {}
+    assert len(content["ignition_presets"]) == 1
+    assert content["ignition_presets"][0]["name"] == "preset A"
 
 
 def test_get_calendar(client: TestClient) -> None:
@@ -114,10 +101,11 @@ def test_list_calendars(client: TestClient) -> None:
     assert len(content["data"]) == 2
 
 
-def test_duplicate_calendar(client: TestClient) -> None:
+def test_duplicate_calendar(client: TestClient, session: Session) -> None:
     created = client.post(
         CALENDARS_URL, json=calendar_payload(label="calendar_example")
     ).json()
+    create_ignition_preset(session, calendar_id=uuid.UUID(created["uuid"]), name="preset A")
 
     response = client.post(f"{CALENDARS_URL}{created['uuid']}/duplicate")
 
@@ -125,8 +113,10 @@ def test_duplicate_calendar(client: TestClient) -> None:
     content = response.json()
     assert content["uuid"] != created["uuid"]
     assert content["label"] == "calendar_example copy"
-    assert content["presets"] == created["presets"]
-    assert content["days"] == created["days"]
+    assert content["weekdays"] == created["weekdays"]
+    assert len(content["ignition_presets"]) == 1
+    assert content["ignition_presets"][0]["name"] == "preset A"
+    assert content["ignition_presets"][0]["uuid"] != created["uuid"]
 
     list_response = client.get(CALENDARS_URL)
     assert list_response.json()["count"] == 2
@@ -143,12 +133,12 @@ def test_update_calendar(client: TestClient) -> None:
 
     response = client.patch(
         f"{CALENDARS_URL}{created['uuid']}",
-        json={"days": {"lundi": "exception"}},
+        json={"weekdays": [6, 7]},
     )
 
     assert response.status_code == 200
     content = response.json()
-    assert content["days"] == {"lundi": "exception"}
+    assert content["weekdays"] == [6, 7]
     assert content["label"] == created["label"]
 
 
@@ -171,6 +161,18 @@ def test_delete_calendar(client: TestClient) -> None:
 
     get_response = client.get(f"{CALENDARS_URL}{created['uuid']}")
     assert get_response.status_code == 404
+
+
+def test_delete_calendar_cascades_to_ignition_presets(
+    client: TestClient, session: Session
+) -> None:
+    created = client.post(CALENDARS_URL, json=calendar_payload()).json()
+    preset = create_ignition_preset(session, calendar_id=uuid.UUID(created["uuid"]))
+
+    client.request("DELETE", CALENDARS_URL, json={"uuids": [created["uuid"]]})
+
+    response = client.get(f"{IGNITION_PRESETS_URL}{preset.uuid}")
+    assert response.status_code == 404
 
 
 def test_delete_calendar_not_found(client: TestClient) -> None:
@@ -226,3 +228,166 @@ def test_delete_calendars_bulk_not_found(client: TestClient) -> None:
     assert response.status_code == 404
     # nothing should be deleted when part of the batch is invalid
     assert client.get(CALENDARS_URL).json()["count"] == 1
+
+
+def test_create_ignition_preset(client: TestClient) -> None:
+    calendar = client.post(CALENDARS_URL, json=calendar_payload()).json()
+
+    response = client.post(
+        IGNITION_PRESETS_URL, json=ignition_preset_payload(calendar["uuid"])
+    )
+
+    assert response.status_code == 201
+    content = response.json()
+    assert content["calendar_id"] == calendar["uuid"]
+    assert content["start_date"] == "01/01/2026"
+    assert content["stop_date"] == "31/01/2026"
+    assert content["start_time"] == "09:15"
+    assert content["stop_time"] == "19:00"
+    assert "uuid" in content
+    assert "created_at" in content
+    assert "updated_at" in content
+
+
+def test_create_ignition_preset_unknown_calendar(client: TestClient) -> None:
+    response = client.post(
+        IGNITION_PRESETS_URL, json=ignition_preset_payload(uuid.uuid4())
+    )
+
+    assert response.status_code == 404
+
+
+def test_create_ignition_preset_bad_date_format(client: TestClient) -> None:
+    calendar = client.post(CALENDARS_URL, json=calendar_payload()).json()
+
+    response = client.post(
+        IGNITION_PRESETS_URL,
+        json=ignition_preset_payload(calendar["uuid"], start_date="2026-01-01"),
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_ignition_preset_start_after_stop(client: TestClient) -> None:
+    calendar = client.post(CALENDARS_URL, json=calendar_payload()).json()
+
+    response = client.post(
+        IGNITION_PRESETS_URL,
+        json=ignition_preset_payload(
+            calendar["uuid"], start_date="31/01/2026", stop_date="01/01/2026"
+        ),
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_ignition_preset_overlap_rejected(client: TestClient) -> None:
+    calendar = client.post(CALENDARS_URL, json=calendar_payload()).json()
+    client.post(IGNITION_PRESETS_URL, json=ignition_preset_payload(calendar["uuid"]))
+
+    response = client.post(
+        IGNITION_PRESETS_URL,
+        json=ignition_preset_payload(
+            calendar["uuid"], start_date="15/01/2026", stop_date="15/02/2026"
+        ),
+    )
+
+    assert response.status_code == 409
+
+
+def test_get_ignition_preset_not_found(client: TestClient) -> None:
+    response = client.get(f"{IGNITION_PRESETS_URL}{uuid.uuid4()}")
+
+    assert response.status_code == 404
+
+
+def test_list_ignition_presets(client: TestClient) -> None:
+    calendar = client.post(CALENDARS_URL, json=calendar_payload()).json()
+    client.post(IGNITION_PRESETS_URL, json=ignition_preset_payload(calendar["uuid"]))
+    client.post(
+        IGNITION_PRESETS_URL,
+        json=ignition_preset_payload(
+            calendar["uuid"], start_date="01/02/2026", stop_date="28/02/2026"
+        ),
+    )
+
+    response = client.get(IGNITION_PRESETS_URL)
+
+    assert response.status_code == 200
+    assert response.json()["count"] == 2
+
+
+def test_update_ignition_preset(client: TestClient) -> None:
+    calendar = client.post(CALENDARS_URL, json=calendar_payload()).json()
+    created = client.post(
+        IGNITION_PRESETS_URL, json=ignition_preset_payload(calendar["uuid"])
+    ).json()
+
+    response = client.patch(
+        f"{IGNITION_PRESETS_URL}{created['uuid']}", json={"name": "renamed"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "renamed"
+
+
+def test_update_ignition_preset_not_found(client: TestClient) -> None:
+    response = client.patch(
+        f"{IGNITION_PRESETS_URL}{uuid.uuid4()}", json={"name": "renamed"}
+    )
+
+    assert response.status_code == 404
+
+
+def test_update_ignition_preset_unknown_calendar(client: TestClient) -> None:
+    calendar = client.post(CALENDARS_URL, json=calendar_payload()).json()
+    created = client.post(
+        IGNITION_PRESETS_URL, json=ignition_preset_payload(calendar["uuid"])
+    ).json()
+
+    response = client.patch(
+        f"{IGNITION_PRESETS_URL}{created['uuid']}",
+        json={"calendar_id": str(uuid.uuid4())},
+    )
+
+    assert response.status_code == 404
+
+
+def test_update_ignition_preset_overlap_rejected(client: TestClient) -> None:
+    calendar = client.post(CALENDARS_URL, json=calendar_payload()).json()
+    client.post(IGNITION_PRESETS_URL, json=ignition_preset_payload(calendar["uuid"]))
+    other = client.post(
+        IGNITION_PRESETS_URL,
+        json=ignition_preset_payload(
+            calendar["uuid"], start_date="01/02/2026", stop_date="28/02/2026"
+        ),
+    ).json()
+
+    response = client.patch(
+        f"{IGNITION_PRESETS_URL}{other['uuid']}", json={"start_date": "15/01/2026"}
+    )
+
+    assert response.status_code == 409
+
+
+def test_delete_ignition_presets_bulk(client: TestClient) -> None:
+    calendar = client.post(CALENDARS_URL, json=calendar_payload()).json()
+    created = client.post(
+        IGNITION_PRESETS_URL, json=ignition_preset_payload(calendar["uuid"])
+    ).json()
+
+    response = client.request(
+        "DELETE", IGNITION_PRESETS_URL, json={"uuids": [created["uuid"]]}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "1 ignition preset(s) deleted successfully"
+    assert client.get(f"{IGNITION_PRESETS_URL}{created['uuid']}").status_code == 404
+
+
+def test_delete_ignition_presets_not_found(client: TestClient) -> None:
+    response = client.request(
+        "DELETE", IGNITION_PRESETS_URL, json={"uuids": [str(uuid.uuid4())]}
+    )
+
+    assert response.status_code == 404

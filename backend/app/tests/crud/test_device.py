@@ -123,4 +123,4 @@ def test_device_to_public_with_group_and_calendar(session: Session) -> None:
     assert public.group_id == group.uuid
     assert public.calendar is not None
     assert public.calendar.uuid == calendar.uuid
-    assert public.calendar.presets == calendar.presets
+    assert public.calendar.weekdays == calendar.weekdays

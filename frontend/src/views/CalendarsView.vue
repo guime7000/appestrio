@@ -33,10 +33,6 @@ const allSelected = computed(
     calendars.value.length > 0 && selectedCalendarUuids.value.size === calendars.value.length,
 );
 
-const calendarLabelByUuid = computed<Record<string, string>>(() =>
-  Object.fromEntries(calendars.value.map((c) => [c.uuid, c.label])),
-);
-
 async function loadCalendars() {
   const result = await calendarsApi.list();
   calendars.value = result.data;
@@ -265,51 +261,6 @@ async function deletePreset(uuid: string) {
   await refreshActiveCalendar();
 }
 
-// --- Associate existing Allumages to the active calendar (multi-select) ---
-const associateModalOpen = ref(false);
-const associateError = ref<string | null>(null);
-const allPresets = ref<IgnitionPresetPublic[]>([]);
-const associateSelectedUuids = ref<Set<string>>(new Set());
-
-const availablePresetsToAssociate = computed(() =>
-  allPresets.value.filter((preset) => preset.calendar_id !== activeCalendarUuid.value),
-);
-
-async function openAssociateModal() {
-  if (!activeCalendarUuid.value) return;
-  associateError.value = null;
-  associateSelectedUuids.value = new Set();
-  const result = await ignitionPresetsApi.list();
-  allPresets.value = result.data;
-  associateModalOpen.value = true;
-}
-
-function closeAssociateModal() {
-  associateModalOpen.value = false;
-}
-
-function toggleAssociateSelection(uuid: string) {
-  if (associateSelectedUuids.value.has(uuid)) {
-    associateSelectedUuids.value.delete(uuid);
-  } else {
-    associateSelectedUuids.value.add(uuid);
-  }
-}
-
-async function confirmAssociate() {
-  if (!activeCalendarUuid.value) return;
-  associateError.value = null;
-  try {
-    for (const uuid of associateSelectedUuids.value) {
-      await ignitionPresetsApi.update(uuid, { calendar_id: activeCalendarUuid.value });
-    }
-    associateModalOpen.value = false;
-    await refreshActiveCalendar();
-  } catch (err) {
-    associateError.value = err instanceof Error ? err.message : String(err);
-  }
-}
-
 onMounted(loadCalendars);
 </script>
 
@@ -374,7 +325,6 @@ onMounted(loadCalendars);
 
         <div class="bulk-actions">
           <button type="button" @click="openCreatePresetModal">Créer un allumage</button>
-          <button type="button" @click="openAssociateModal">Associer des allumages</button>
         </div>
 
         <table>
@@ -506,36 +456,6 @@ onMounted(loadCalendars);
           <button type="submit">{{ editingPresetUuid ? "Mettre à jour" : "Enregistrer" }}</button>
         </div>
       </form>
-    </div>
-  </div>
-
-  <div v-if="associateModalOpen" class="modal-backdrop" @click.self="closeAssociateModal">
-    <div class="modal">
-      <button type="button" class="modal-close" aria-label="Fermer" @click="closeAssociateModal">
-        ✕
-      </button>
-      <h2>Associer des allumages</h2>
-      <p class="note">
-        Les allumages sélectionnés seront déplacés vers « {{ activeCalendar?.label }} ».
-      </p>
-      <div class="picker-list">
-        <label v-for="preset in availablePresetsToAssociate" :key="preset.uuid" class="picker-row">
-          <input
-            type="checkbox"
-            :checked="associateSelectedUuids.has(preset.uuid)"
-            @change="toggleAssociateSelection(preset.uuid)"
-          />
-          {{ preset.name }} (actuellement : {{ calendarLabelByUuid[preset.calendar_id] ?? "—" }})
-        </label>
-        <p v-if="availablePresetsToAssociate.length === 0" class="note">
-          Aucun autre allumage disponible.
-        </p>
-      </div>
-      <p v-if="associateError" class="error">{{ associateError }}</p>
-      <div class="modal-actions">
-        <button type="button" @click="closeAssociateModal">Annuler</button>
-        <button type="button" @click="confirmAssociate">Enregistrer</button>
-      </div>
     </div>
   </div>
 </template>
@@ -697,14 +617,4 @@ td {
   font-size: 0.9rem;
 }
 
-.picker-list {
-  max-height: 320px;
-  overflow-y: auto;
-  margin: 1rem 0;
-}
-
-.picker-row {
-  display: block;
-  padding: 0.25rem 0;
-}
 </style>

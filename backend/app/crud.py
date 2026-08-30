@@ -1,12 +1,11 @@
 import uuid
-from copy import deepcopy
+from datetime import datetime
 
 from sqlmodel import Session, func, select
 
 from app.models import (
     Calendar,
     CalendarCreate,
-    CalendarPublic,
     CalendarUpdate,
     Device,
     DeviceCreate,
@@ -15,8 +14,13 @@ from app.models import (
     Group,
     GroupCreate,
     GroupUpdate,
+    IgnitionPreset,
+    IgnitionPresetCreate,
+    IgnitionPresetUpdate,
     utcnow,
 )
+from app.models.calendars import CalendarPublic
+from app.models.ignition_presets import DATE_FORMAT
 
 
 class DeviceNotFoundError(Exception):
@@ -24,12 +28,16 @@ class DeviceNotFoundError(Exception):
         self.missing_uuids = missing_uuids
 
 
+class IgnitionPresetOverlapError(Exception):
+    pass
+
+
+class IgnitionPresetDateRangeError(Exception):
+    pass
+
+
 def create_calendar(*, session: Session, calendar_create: CalendarCreate) -> Calendar:
-    db_calendar = Calendar(
-        label=calendar_create.label,
-        presets=calendar_create.presets or {},
-        days=calendar_create.days or {},
-    )
+    db_calendar = Calendar(label=calendar_create.label, weekdays=calendar_create.weekdays)
     session.add(db_calendar)
     session.commit()
     session.refresh(db_calendar)
@@ -43,10 +51,21 @@ def get_calendar(*, session: Session, calendar_uuid: uuid.UUID) -> Calendar | No
 def duplicate_calendar(*, session: Session, db_calendar: Calendar) -> Calendar:
     duplicate = Calendar(
         label=f"{db_calendar.label} copy",
-        presets=deepcopy(db_calendar.presets),
-        days=deepcopy(db_calendar.days),
+        weekdays=list(db_calendar.weekdays),
     )
     session.add(duplicate)
+    for preset in db_calendar.ignition_presets:
+        session.add(
+            IgnitionPreset(
+                name=preset.name,
+                description=preset.description,
+                start_date=preset.start_date,
+                stop_date=preset.stop_date,
+                start_time=preset.start_time,
+                stop_time=preset.stop_time,
+                calendar_id=duplicate.uuid,
+            )
+        )
     session.commit()
     session.refresh(duplicate)
     return duplicate
@@ -64,11 +83,10 @@ def update_calendar(
     *, session: Session, db_calendar: Calendar, calendar_in: CalendarUpdate
 ) -> Calendar:
     update_data = calendar_in.model_dump(exclude_unset=True)
-    # presets/days are non-nullable on the table; treat an explicit null as
-    # "clear it" the same way create_calendar treats a null on creation.
-    for nullable_json_field in ("presets", "days"):
-        if nullable_json_field in update_data and update_data[nullable_json_field] is None:
-            update_data[nullable_json_field] = {}
+    # weekdays is non-nullable on the table; treat an explicit null as
+    # "clear it" the same way create_calendar treats an omitted list.
+    if "weekdays" in update_data and update_data["weekdays"] is None:
+        update_data["weekdays"] = []
     db_calendar.sqlmodel_update(update_data)
     db_calendar.updated_at = utcnow()
     session.add(db_calendar)
@@ -96,6 +114,116 @@ def get_calendars_by_uuids(
 def delete_calendars(*, session: Session, db_calendars: list[Calendar]) -> None:
     for db_calendar in db_calendars:
         session.delete(db_calendar)
+    session.commit()
+
+
+def _dates_overlap(start_a: str, stop_a: str, start_b: str, stop_b: str) -> bool:
+    a_start = datetime.strptime(start_a, DATE_FORMAT)
+    a_stop = datetime.strptime(stop_a, DATE_FORMAT)
+    b_start = datetime.strptime(start_b, DATE_FORMAT)
+    b_stop = datetime.strptime(stop_b, DATE_FORMAT)
+    return a_start <= b_stop and b_start <= a_stop
+
+
+def _check_no_overlap(
+    *,
+    session: Session,
+    calendar_id: uuid.UUID,
+    start_date: str,
+    stop_date: str,
+    exclude_uuid: uuid.UUID | None = None,
+) -> None:
+    existing = session.exec(
+        select(IgnitionPreset).where(IgnitionPreset.calendar_id == calendar_id)
+    ).all()
+    for preset in existing:
+        if exclude_uuid is not None and preset.uuid == exclude_uuid:
+            continue
+        if _dates_overlap(start_date, stop_date, preset.start_date, preset.stop_date):
+            raise IgnitionPresetOverlapError(
+                f"Date range overlaps with existing ignition_preset "
+                f"{preset.uuid} ({preset.name})"
+            )
+
+
+def create_ignition_preset(
+    *, session: Session, ignition_preset_create: IgnitionPresetCreate
+) -> IgnitionPreset:
+    _check_no_overlap(
+        session=session,
+        calendar_id=ignition_preset_create.calendar_id,
+        start_date=ignition_preset_create.start_date,
+        stop_date=ignition_preset_create.stop_date,
+    )
+    db_ignition_preset = IgnitionPreset.model_validate(ignition_preset_create)
+    session.add(db_ignition_preset)
+    session.commit()
+    session.refresh(db_ignition_preset)
+    return db_ignition_preset
+
+
+def get_ignition_preset(
+    *, session: Session, ignition_preset_uuid: uuid.UUID
+) -> IgnitionPreset | None:
+    return session.get(IgnitionPreset, ignition_preset_uuid)
+
+
+def get_ignition_presets(
+    *, session: Session, skip: int = 0, limit: int = 100
+) -> tuple[list[IgnitionPreset], int]:
+    count = session.exec(select(func.count()).select_from(IgnitionPreset)).one()
+    presets = session.exec(select(IgnitionPreset).offset(skip).limit(limit)).all()
+    return list(presets), count
+
+
+def update_ignition_preset(
+    *,
+    session: Session,
+    db_ignition_preset: IgnitionPreset,
+    ignition_preset_in: IgnitionPresetUpdate,
+) -> IgnitionPreset:
+    update_data = ignition_preset_in.model_dump(exclude_unset=True)
+    calendar_id = update_data.get("calendar_id", db_ignition_preset.calendar_id)
+    start_date = update_data.get("start_date", db_ignition_preset.start_date)
+    stop_date = update_data.get("stop_date", db_ignition_preset.stop_date)
+    if datetime.strptime(start_date, DATE_FORMAT) > datetime.strptime(stop_date, DATE_FORMAT):
+        raise IgnitionPresetDateRangeError("start_date must not be after stop_date")
+    _check_no_overlap(
+        session=session,
+        calendar_id=calendar_id,
+        start_date=start_date,
+        stop_date=stop_date,
+        exclude_uuid=db_ignition_preset.uuid,
+    )
+    db_ignition_preset.sqlmodel_update(update_data)
+    db_ignition_preset.updated_at = utcnow()
+    session.add(db_ignition_preset)
+    session.commit()
+    session.refresh(db_ignition_preset)
+    return db_ignition_preset
+
+
+def delete_ignition_preset(*, session: Session, db_ignition_preset: IgnitionPreset) -> None:
+    session.delete(db_ignition_preset)
+    session.commit()
+
+
+def get_ignition_presets_by_uuids(
+    *, session: Session, uuids: list[uuid.UUID]
+) -> list[IgnitionPreset]:
+    unique_uuids = set(uuids)
+    return list(
+        session.exec(
+            select(IgnitionPreset).where(IgnitionPreset.uuid.in_(unique_uuids))  # type: ignore[attr-defined]
+        ).all()
+    )
+
+
+def delete_ignition_presets(
+    *, session: Session, db_ignition_presets: list[IgnitionPreset]
+) -> None:
+    for db_ignition_preset in db_ignition_presets:
+        session.delete(db_ignition_preset)
     session.commit()
 
 

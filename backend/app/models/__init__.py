@@ -28,13 +28,25 @@ from app.models.groups import (
     GroupsPublic,
     GroupUpdate,
 )
+from app.models.ignition_presets import (
+    IgnitionPreset,
+    IgnitionPresetBase,
+    IgnitionPresetCreate,
+    IgnitionPresetPublic,
+    IgnitionPresetsPublic,
+    IgnitionPresetUpdate,
+)
 
 # Calendar.groups / Device.group reference Group through a string forward ref
 # (TYPE_CHECKING-only import in calendars.py/devices.py) to avoid a circular
-# import, since Group itself imports Calendar and Device. Now that Group is
-# fully defined, resolve those forward refs.
+# import, since Group itself imports Calendar and Device. Same story for
+# IgnitionPreset.calendar, which only sees Calendar via TYPE_CHECKING to avoid
+# a cycle the other way (calendars.py imports IgnitionPreset directly for its
+# ignition_presets relationship and CalendarPublic's nested list). Now that
+# every model is fully defined, resolve those forward refs.
 Calendar.model_rebuild(_types_namespace={"Group": Group})
 Device.model_rebuild(_types_namespace={"Group": Group})
+IgnitionPreset.model_rebuild(_types_namespace={"Calendar": Calendar})
 
 __all__ = [
     "SQLModel",
@@ -60,6 +72,12 @@ __all__ = [
     "GroupPublic",
     "GroupsPublic",
     "GroupUpdate",
+    "IgnitionPreset",
+    "IgnitionPresetBase",
+    "IgnitionPresetCreate",
+    "IgnitionPresetPublic",
+    "IgnitionPresetsPublic",
+    "IgnitionPresetUpdate",
     "Message",
     "utcnow",
 ]

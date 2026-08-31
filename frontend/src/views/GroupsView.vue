@@ -11,6 +11,7 @@ import type {
   CalendarPublic,
   CalendarSummaryPublic,
   DevicePublic,
+  GroupDevicePublic,
   GroupPublic,
 } from "@/api/types";
 
@@ -66,6 +67,23 @@ async function loadAll() {
 
 function calendarLabel(group: GroupPublic): string {
   return (group.calendar_id && calendarLabels.value[group.calendar_id]) || "—";
+}
+
+function isGroupFullyActive(group: GroupPublic): boolean {
+  return group.devices.length > 0 && group.devices.every((device) => device.active);
+}
+
+async function toggleDeviceActive(device: GroupDevicePublic) {
+  await devicesApi.update(device.uuid, { active: !device.active });
+  await loadAll();
+}
+
+async function toggleGroupDevicesActive(group: GroupPublic) {
+  const nextActive = !isGroupFullyActive(group);
+  await Promise.all(
+    group.devices.map((device) => devicesApi.update(device.uuid, { active: nextActive })),
+  );
+  await loadAll();
 }
 
 async function createGroup() {
@@ -248,7 +266,14 @@ onMounted(async () => {
               @change="toggleGroupSelection(group.uuid)"
             />
           </td>
-          <td>
+          <td class="group-name-cell">
+            <button
+              type="button"
+              :disabled="group.devices.length === 0"
+              @click="toggleGroupDevicesActive(group)"
+            >
+              {{ isGroupFullyActive(group) ? "Tout éteindre" : "Tout allumer" }}
+            </button>
             <a href="#" class="item-link" @click.prevent="openDetailModal(group.uuid)">
               {{ group.label }}
             </a>
@@ -274,20 +299,54 @@ onMounted(async () => {
             </a>
             <span v-else>—</span>
           </td>
-          <td>
+          <td class="row-actions">
             <button @click="openDevicePicker(group)">Associer des appareils</button>
           </td>
         </tr>
         <tr v-if="expandedGroupUuids.has(group.uuid)" class="expanded-row">
           <td></td>
           <td colspan="4">
-            <ul class="device-list">
-              <li v-for="device in group.devices" :key="device.uuid">
-                <a href="#" class="item-link" @click.prevent="openDeviceDetailModal(device.uuid)">
-                  {{ device.device_name }}
-                </a>
-              </li>
-            </ul>
+            <table v-if="group.devices.length > 0" class="device-subtable">
+              <thead>
+                <tr>
+                  <th>Lumestrio</th>
+                  <th>Audio</th>
+                  <th>DMX</th>
+                  <th>Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="device in group.devices" :key="device.uuid">
+                  <td>
+                    <a
+                      href="#"
+                      class="item-link"
+                      @click.prevent="openDeviceDetailModal(device.uuid)"
+                    >
+                      {{ device.device_name }}
+                    </a>
+                  </td>
+                  <td>
+                    <span :class="device.handles_audio ? 'icon-ok' : 'icon-ko'">
+                      {{ device.handles_audio ? "✓" : "✗" }}
+                    </span>
+                  </td>
+                  <td>
+                    <span :class="device.handles_dmx ? 'icon-ok' : 'icon-ko'">
+                      {{ device.handles_dmx ? "✓" : "✗" }}
+                    </span>
+                  </td>
+                  <td class="status-cell">
+                    <span :class="device.active ? 'icon-ok' : 'icon-ko'">
+                      {{ device.active ? "✓" : "✗" }}
+                    </span>
+                    <button type="button" @click="toggleDeviceActive(device)">
+                      {{ device.active ? "Éteindre" : "Allumer" }}
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </td>
         </tr>
       </template>
@@ -468,10 +527,31 @@ td {
   padding-top: 0;
 }
 
-.device-list {
-  margin: 0;
-  padding-left: 2.5rem;
-  list-style: disc;
+.row-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.group-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.device-subtable {
+  width: auto;
+  margin-left: 2.5rem;
+}
+
+.device-subtable th,
+.device-subtable td {
+  padding: 0.35rem 0.75rem;
+}
+
+.status-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .modal-backdrop {

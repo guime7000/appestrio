@@ -68,6 +68,8 @@ export interface GroupDevicePublic {
   device_id: string;
   device_name: string;
   active: boolean;
+  handles_audio: boolean;
+  handles_dmx: boolean;
 }
 
 export interface GroupPublic {

@@ -262,6 +262,85 @@ def test_create_ignition_preset_overlap_scoped_per_calendar(session: Session) ->
     assert preset.calendar_id == calendar_b.uuid
 
 
+def test_create_ignition_preset_same_dates_non_overlapping_times_allowed(
+    session: Session,
+) -> None:
+    calendar = create_calendar(session)
+    create_ignition_preset(
+        session,
+        calendar_id=calendar.uuid,
+        start_date="21/12/2026",
+        stop_date="23/12/2026",
+        start_time="15:30",
+        stop_time="17:00",
+    )
+
+    non_overlapping = IgnitionPresetCreate(
+        **ignition_preset_payload(
+            calendar.uuid,
+            start_date="21/12/2026",
+            stop_date="23/12/2026",
+            start_time="18:00",
+            stop_time="22:00",
+        )
+    )
+
+    preset = crud.create_ignition_preset(session=session, ignition_preset_create=non_overlapping)
+    assert preset.start_time == "18:00"
+
+
+def test_create_ignition_preset_same_dates_overlapping_times_rejected(
+    session: Session,
+) -> None:
+    calendar = create_calendar(session)
+    create_ignition_preset(
+        session,
+        calendar_id=calendar.uuid,
+        start_date="21/12/2026",
+        stop_date="23/12/2026",
+        start_time="15:30",
+        stop_time="17:00",
+    )
+
+    overlapping = IgnitionPresetCreate(
+        **ignition_preset_payload(
+            calendar.uuid,
+            start_date="21/12/2026",
+            stop_date="23/12/2026",
+            start_time="16:30",
+            stop_time="22:00",
+        )
+    )
+
+    with pytest.raises(IgnitionPresetOverlapError):
+        crud.create_ignition_preset(session=session, ignition_preset_create=overlapping)
+
+
+def test_create_ignition_preset_back_to_back_times_allowed(session: Session) -> None:
+    calendar = create_calendar(session)
+    create_ignition_preset(
+        session,
+        calendar_id=calendar.uuid,
+        start_date="21/12/2026",
+        stop_date="23/12/2026",
+        start_time="15:30",
+        stop_time="17:00",
+    )
+
+    back_to_back = IgnitionPresetCreate(
+        **ignition_preset_payload(
+            calendar.uuid,
+            start_date="21/12/2026",
+            stop_date="23/12/2026",
+            start_time="17:00",
+            stop_time="18:00",
+        )
+    )
+
+    preset = crud.create_ignition_preset(session=session, ignition_preset_create=back_to_back)
+    assert preset.start_time == "17:00"
+
+
 def test_update_ignition_preset(session: Session) -> None:
     calendar = create_calendar(session)
     preset = create_ignition_preset(session, calendar_id=calendar.uuid)

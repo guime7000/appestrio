@@ -20,7 +20,7 @@ from app.models import (
     utcnow,
 )
 from app.models.calendars import CalendarPublic
-from app.models.ignition_presets import DATE_FORMAT
+from app.models.ignition_presets import DATE_FORMAT, TIME_FORMAT
 
 
 class DeviceNotFoundError(Exception):
@@ -117,12 +117,24 @@ def delete_calendars(*, session: Session, db_calendars: list[Calendar]) -> None:
     session.commit()
 
 
-def _dates_overlap(start_a: str, stop_a: str, start_b: str, stop_b: str) -> bool:
+def _date_ranges_overlap(start_a: str, stop_a: str, start_b: str, stop_b: str) -> bool:
     a_start = datetime.strptime(start_a, DATE_FORMAT)
     a_stop = datetime.strptime(stop_a, DATE_FORMAT)
     b_start = datetime.strptime(start_b, DATE_FORMAT)
     b_stop = datetime.strptime(stop_b, DATE_FORMAT)
     return a_start <= b_stop and b_start <= a_stop
+
+
+def _time_ranges_overlap(start_a: str, stop_a: str, start_b: str, stop_b: str) -> bool:
+    # Strict "<" so back-to-back windows (one stopping exactly when the other
+    # starts) are allowed, not just windows that share no instant at all.
+    # Assumes same-day windows (start_time <= stop_time); a window crossing
+    # midnight isn't modeled here.
+    a_start = datetime.strptime(start_a, TIME_FORMAT)
+    a_stop = datetime.strptime(stop_a, TIME_FORMAT)
+    b_start = datetime.strptime(start_b, TIME_FORMAT)
+    b_stop = datetime.strptime(stop_b, TIME_FORMAT)
+    return a_start < b_stop and b_start < a_stop
 
 
 def _check_no_overlap(
@@ -131,6 +143,8 @@ def _check_no_overlap(
     calendar_id: uuid.UUID,
     start_date: str,
     stop_date: str,
+    start_time: str,
+    stop_time: str,
     exclude_uuid: uuid.UUID | None = None,
 ) -> None:
     existing = session.exec(
@@ -139,9 +153,14 @@ def _check_no_overlap(
     for preset in existing:
         if exclude_uuid is not None and preset.uuid == exclude_uuid:
             continue
-        if _dates_overlap(start_date, stop_date, preset.start_date, preset.stop_date):
+        # Two presets only actually conflict if their active days AND their
+        # daily time windows overlap -- same dates but different times of day
+        # (e.g. an afternoon slot and an evening slot) are perfectly fine.
+        if _date_ranges_overlap(
+            start_date, stop_date, preset.start_date, preset.stop_date
+        ) and _time_ranges_overlap(start_time, stop_time, preset.start_time, preset.stop_time):
             raise IgnitionPresetOverlapError(
-                f"Date range overlaps with existing ignition_preset "
+                f"Date/time range overlaps with existing ignition_preset "
                 f"{preset.uuid} ({preset.name})"
             )
 
@@ -154,6 +173,8 @@ def create_ignition_preset(
         calendar_id=ignition_preset_create.calendar_id,
         start_date=ignition_preset_create.start_date,
         stop_date=ignition_preset_create.stop_date,
+        start_time=ignition_preset_create.start_time,
+        stop_time=ignition_preset_create.stop_time,
     )
     db_ignition_preset = IgnitionPreset.model_validate(ignition_preset_create)
     session.add(db_ignition_preset)
@@ -186,6 +207,8 @@ def update_ignition_preset(
     calendar_id = update_data.get("calendar_id", db_ignition_preset.calendar_id)
     start_date = update_data.get("start_date", db_ignition_preset.start_date)
     stop_date = update_data.get("stop_date", db_ignition_preset.stop_date)
+    start_time = update_data.get("start_time", db_ignition_preset.start_time)
+    stop_time = update_data.get("stop_time", db_ignition_preset.stop_time)
     if datetime.strptime(start_date, DATE_FORMAT) > datetime.strptime(stop_date, DATE_FORMAT):
         raise IgnitionPresetDateRangeError("start_date must not be after stop_date")
     _check_no_overlap(
@@ -193,6 +216,8 @@ def update_ignition_preset(
         calendar_id=calendar_id,
         start_date=start_date,
         stop_date=stop_date,
+        start_time=start_time,
+        stop_time=stop_time,
         exclude_uuid=db_ignition_preset.uuid,
     )
     db_ignition_preset.sqlmodel_update(update_data)

@@ -38,6 +38,8 @@ class GroupDevicePublic(SQLModel):
     device_id: str
     device_name: str
     active: bool
+    handles_audio: bool
+    handles_dmx: bool
 
 
 class GroupPublic(GroupBase):

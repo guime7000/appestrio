@@ -23,6 +23,18 @@ const WEEKDAY_OPTIONS: { value: Weekday; label: string }[] = [
 const DATE_PATTERN = /^\d{2}\/\d{2}\/\d{4}$/;
 const TIME_PATTERN = /^\d{2}:\d{2}$/;
 
+// Native <input type="date"> always works in ISO (YYYY-MM-DD), but the
+// backend stores/expects DD/MM/YYYY -- these convert at the form boundary.
+function toIsoDate(ddMmYyyy: string): string {
+  const [day, month, year] = ddMmYyyy.split("/");
+  return day && month && year ? `${year}-${month}-${day}` : "";
+}
+
+function fromIsoDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split("-");
+  return day && month && year ? `${day}/${month}/${year}` : "";
+}
+
 const calendars = ref<CalendarSummaryPublic[]>([]);
 const selectedCalendarUuids = ref<Set<string>>(new Set());
 const activeCalendarUuid = ref<string | null>(null);
@@ -104,6 +116,15 @@ function toggleWeekday(value: Weekday) {
     calendarForm.weekdays.splice(index, 1);
   }
 }
+
+// Checked only once every day is selected; checking it selects them all,
+// unchecking it clears them all.
+const fullWeekSelected = computed({
+  get: () => calendarForm.weekdays.length === WEEKDAY_OPTIONS.length,
+  set: (value: boolean) => {
+    calendarForm.weekdays = value ? WEEKDAY_OPTIONS.map((option) => option.value) : [];
+  },
+});
 
 function openCreateCalendarModal() {
   calendarFormError.value = null;
@@ -187,6 +208,21 @@ const presetForm = reactive({
   start_time: "",
   stop_time: "",
   calendar_id: "",
+});
+
+// Bound by the native date pickers in the template; presetForm.start_date/
+// stop_date stay in DD/MM/YYYY, matching what the API sends and expects.
+const presetStartDateIso = computed({
+  get: () => toIsoDate(presetForm.start_date),
+  set: (value: string) => {
+    presetForm.start_date = fromIsoDate(value);
+  },
+});
+const presetStopDateIso = computed({
+  get: () => toIsoDate(presetForm.stop_date),
+  set: (value: string) => {
+    presetForm.stop_date = fromIsoDate(value);
+  },
 });
 
 function openCreatePresetModal() {
@@ -379,6 +415,10 @@ onMounted(loadCalendars);
         </label>
         <fieldset class="weekday-fieldset">
           <legend>Jours d'application</legend>
+          <label class="checkbox-label full-week-label">
+            <input type="checkbox" v-model="fullWeekSelected" />
+            Semaine complète
+          </label>
           <label v-for="option in WEEKDAY_OPTIONS" :key="option.value" class="checkbox-label">
             <input
               type="checkbox"
@@ -428,19 +468,19 @@ onMounted(loadCalendars);
         </label>
         <label>
           Date de début <span class="mandatory">*</span>
-          <input v-model="presetForm.start_date" placeholder="JJ/MM/AAAA" required />
+          <input type="date" v-model="presetStartDateIso" required />
         </label>
         <label>
           Date de fin <span class="mandatory">*</span>
-          <input v-model="presetForm.stop_date" placeholder="JJ/MM/AAAA" required />
+          <input type="date" v-model="presetStopDateIso" required />
         </label>
         <label>
           Heure de début <span class="mandatory">*</span>
-          <input v-model="presetForm.start_time" placeholder="HH:MM" required />
+          <input type="time" v-model="presetForm.start_time" required />
         </label>
         <label>
           Heure de fin <span class="mandatory">*</span>
-          <input v-model="presetForm.stop_time" placeholder="HH:MM" required />
+          <input type="time" v-model="presetForm.stop_time" required />
         </label>
         <label v-if="editingPresetUuid">
           Calendrier
@@ -615,6 +655,21 @@ td {
   align-items: center;
   gap: 0.35rem;
   font-size: 0.9rem;
+}
+
+.weekday-fieldset .full-week-label {
+  /* .calendar-form label (a higher-specificity descendant selector) forces
+     flex-direction: column on every label here, which combined with
+     .checkbox-label's align-items: center visually centers the checkbox and
+     text horizontally. Re-assert row layout with matching specificity. */
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-basis: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
 </style>

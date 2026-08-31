@@ -23,6 +23,18 @@ const WEEKDAY_OPTIONS: { value: Weekday; label: string }[] = [
 const DATE_PATTERN = /^\d{2}\/\d{2}\/\d{4}$/;
 const TIME_PATTERN = /^\d{2}:\d{2}$/;
 
+// Native <input type="date"> always works in ISO (YYYY-MM-DD), but the
+// backend stores/expects DD/MM/YYYY -- these convert at the form boundary.
+function toIsoDate(ddMmYyyy: string): string {
+  const [day, month, year] = ddMmYyyy.split("/");
+  return day && month && year ? `${year}-${month}-${day}` : "";
+}
+
+function fromIsoDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split("-");
+  return day && month && year ? `${day}/${month}/${year}` : "";
+}
+
 const calendars = ref<CalendarSummaryPublic[]>([]);
 const selectedCalendarUuids = ref<Set<string>>(new Set());
 const activeCalendarUuid = ref<string | null>(null);
@@ -187,6 +199,21 @@ const presetForm = reactive({
   start_time: "",
   stop_time: "",
   calendar_id: "",
+});
+
+// Bound by the native date pickers in the template; presetForm.start_date/
+// stop_date stay in DD/MM/YYYY, matching what the API sends and expects.
+const presetStartDateIso = computed({
+  get: () => toIsoDate(presetForm.start_date),
+  set: (value: string) => {
+    presetForm.start_date = fromIsoDate(value);
+  },
+});
+const presetStopDateIso = computed({
+  get: () => toIsoDate(presetForm.stop_date),
+  set: (value: string) => {
+    presetForm.stop_date = fromIsoDate(value);
+  },
 });
 
 function openCreatePresetModal() {
@@ -428,19 +455,19 @@ onMounted(loadCalendars);
         </label>
         <label>
           Date de début <span class="mandatory">*</span>
-          <input v-model="presetForm.start_date" placeholder="JJ/MM/AAAA" required />
+          <input type="date" v-model="presetStartDateIso" required />
         </label>
         <label>
           Date de fin <span class="mandatory">*</span>
-          <input v-model="presetForm.stop_date" placeholder="JJ/MM/AAAA" required />
+          <input type="date" v-model="presetStopDateIso" required />
         </label>
         <label>
           Heure de début <span class="mandatory">*</span>
-          <input v-model="presetForm.start_time" placeholder="HH:MM" required />
+          <input type="time" v-model="presetForm.start_time" required />
         </label>
         <label>
           Heure de fin <span class="mandatory">*</span>
-          <input v-model="presetForm.stop_time" placeholder="HH:MM" required />
+          <input type="time" v-model="presetForm.stop_time" required />
         </label>
         <label v-if="editingPresetUuid">
           Calendrier

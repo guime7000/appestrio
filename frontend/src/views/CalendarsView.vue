@@ -117,6 +117,15 @@ function toggleWeekday(value: Weekday) {
   }
 }
 
+// Checked only once every day is selected; checking it selects them all,
+// unchecking it clears them all.
+const fullWeekSelected = computed({
+  get: () => calendarForm.weekdays.length === WEEKDAY_OPTIONS.length,
+  set: (value: boolean) => {
+    calendarForm.weekdays = value ? WEEKDAY_OPTIONS.map((option) => option.value) : [];
+  },
+});
+
 function openCreateCalendarModal() {
   calendarFormError.value = null;
   editingCalendarUuid.value = null;
@@ -406,6 +415,10 @@ onMounted(loadCalendars);
         </label>
         <fieldset class="weekday-fieldset">
           <legend>Jours d'application</legend>
+          <label class="checkbox-label full-week-label">
+            <input type="checkbox" v-model="fullWeekSelected" />
+            Semaine complète
+          </label>
           <label v-for="option in WEEKDAY_OPTIONS" :key="option.value" class="checkbox-label">
             <input
               type="checkbox"
@@ -642,6 +655,21 @@ td {
   align-items: center;
   gap: 0.35rem;
   font-size: 0.9rem;
+}
+
+.weekday-fieldset .full-week-label {
+  /* .calendar-form label (a higher-specificity descendant selector) forces
+     flex-direction: column on every label here, which combined with
+     .checkbox-label's align-items: center visually centers the checkbox and
+     text horizontally. Re-assert row layout with matching specificity. */
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-basis: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
 </style>

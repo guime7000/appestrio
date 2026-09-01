@@ -5,23 +5,36 @@ const router = createRouter({
   routes: [
     {
       path: "/",
-      name: "home",
-      component: () => import("@/views/HomeView.vue"),
+      name: "inauguration",
+      component: () => import("@/views/InaugurationView.vue"),
     },
     {
-      path: "/devices",
-      name: "devices",
-      component: () => import("@/views/DevicesView.vue"),
-    },
-    {
-      path: "/groups",
-      name: "groups",
-      component: () => import("@/views/GroupsView.vue"),
-    },
-    {
-      path: "/calendars",
-      name: "calendars",
-      component: () => import("@/views/CalendarsView.vue"),
+      path: "/configuration",
+      name: "configuration",
+      component: () => import("@/views/ConfigurationView.vue"),
+      redirect: { name: "configuration-devices" },
+      children: [
+        {
+          path: "appareils",
+          name: "configuration-devices",
+          component: () => import("@/views/DevicesView.vue"),
+        },
+        {
+          path: "groupes",
+          name: "configuration-groups",
+          component: () => import("@/views/GroupsView.vue"),
+        },
+        {
+          path: "calendriers",
+          name: "configuration-calendars",
+          component: () => import("@/views/CalendarsView.vue"),
+        },
+        {
+          path: "horloges",
+          name: "configuration-clocks",
+          component: () => import("@/views/HorlogesView.vue"),
+        },
+      ],
     },
   ],
 });

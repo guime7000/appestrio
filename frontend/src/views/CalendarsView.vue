@@ -301,11 +301,8 @@ onMounted(loadCalendars);
 </script>
 
 <template>
-  <h1>Je gère les calendriers</h1>
-
   <div class="calendars-layout">
     <section class="calendars-panel">
-      <h2>Calendriers</h2>
       <div class="bulk-actions">
         <button type="button" @click="openCreateCalendarModal">Créer un calendrier</button>
         <button
@@ -525,9 +522,10 @@ onMounted(loadCalendars);
 
 .bulk-actions {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 0.5rem;
   margin-bottom: 1rem;
-  flex-wrap: wrap;
 }
 
 .clear-selection:disabled {

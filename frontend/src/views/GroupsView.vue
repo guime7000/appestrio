@@ -231,8 +231,6 @@ onMounted(async () => {
 </script>
 
 <template>
-  <h1>Je gère les groupes</h1>
-
   <form class="create-form" @submit.prevent="createGroup">
     <input v-model="newGroupLabel" placeholder="Nom du groupe" required />
     <button type="submit">Créer un groupe</button>

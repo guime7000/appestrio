@@ -2,10 +2,8 @@
 import { useTheme } from "@/composables/useTheme";
 
 const navLinks = [
-  { to: "/", label: "Accueil" },
-  { to: "/devices", label: "Lumestrio" },
-  { to: "/groups", label: "Groupes" },
-  { to: "/calendars", label: "Calendriers" },
+  { to: "/", label: "Inauguration" },
+  { to: "/configuration", label: "Configuration" },
 ];
 
 const { theme, toggleTheme } = useTheme();

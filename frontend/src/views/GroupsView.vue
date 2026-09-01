@@ -242,6 +242,7 @@ onMounted(async () => {
     </button>
   </div>
 
+  <div class="table-scroll">
   <table>
     <thead>
       <tr>
@@ -249,9 +250,8 @@ onMounted(async () => {
           <input type="checkbox" :checked="allSelected" @change="toggleSelectAllGroups" />
         </th>
         <th>Nom du groupe</th>
-        <th>Nombre de lumestrio</th>
+        <th class="device-count-column">Nb d'appareils</th>
         <th>Calendrier</th>
-        <th></th>
       </tr>
     </thead>
     <tbody>
@@ -286,7 +286,7 @@ onMounted(async () => {
             </button>
           </td>
           <td>{{ group.devices.length }}</td>
-          <td>
+          <td class="calendar-cell">
             <a
               v-if="group.calendar_id"
               href="#"
@@ -296,14 +296,15 @@ onMounted(async () => {
               {{ calendarLabel(group) }}
             </a>
             <span v-else>—</span>
-          </td>
-          <td class="row-actions">
-            <button @click="openDevicePicker(group)">Associer des appareils</button>
+            <button v-if="group.calendar_id" type="button" class="test-calendar-button">
+              Test calendrier
+            </button>
+            <button type="button" @click="openDevicePicker(group)">Associer des appareils</button>
           </td>
         </tr>
         <tr v-if="expandedGroupUuids.has(group.uuid)" class="expanded-row">
           <td></td>
-          <td colspan="4">
+          <td colspan="3">
             <table v-if="group.devices.length > 0" class="device-subtable">
               <thead>
                 <tr>
@@ -350,6 +351,7 @@ onMounted(async () => {
       </template>
     </tbody>
   </table>
+  </div>
 
   <div v-if="editingGroupUuid" class="picker">
     <h2>Appareils du groupe</h2>
@@ -463,15 +465,24 @@ onMounted(async () => {
   margin-bottom: 1rem;
 }
 
+.table-scroll {
+  overflow-x: auto;
+}
+
 table {
   border-collapse: collapse;
   width: 100%;
+}
+
+.device-count-column {
+  width: 8rem;
 }
 
 th,
 td {
   text-align: left;
   padding: 0.5rem;
+  white-space: nowrap;
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -499,6 +510,13 @@ td {
   cursor: pointer;
 }
 
+.calendar-cell {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .expand-toggle {
   background: none;
   border: none;
@@ -523,11 +541,6 @@ td {
 .expanded-row td {
   background: var(--color-surface-alt);
   padding-top: 0;
-}
-
-.row-actions {
-  display: flex;
-  gap: 0.5rem;
 }
 
 .group-name-cell {

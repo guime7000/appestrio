@@ -29,6 +29,11 @@ const router = createRouter({
           name: "configuration-calendars",
           component: () => import("@/views/CalendarsView.vue"),
         },
+        {
+          path: "horloges",
+          name: "configuration-clocks",
+          component: () => import("@/views/HorlogesView.vue"),
+        },
       ],
     },
   ],

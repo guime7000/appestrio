@@ -1,17 +1,23 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 
 import CalendarDetailModal from "@/components/CalendarDetailModal.vue";
 import GroupDetailModal from "@/components/GroupDetailModal.vue";
 import { devicesApi } from "@/api/devices";
 import { groupsApi } from "@/api/groups";
-import type { CalendarPublic, DevicePublic, DeviceType, GroupPublic } from "@/api/types";
+import type {
+  CalendarPublic,
+  DevicePublic,
+  DeviceType,
+  FreeDeviceNumbers,
+  GroupPublic,
+} from "@/api/types";
 
 const deviceTypes: DeviceType[] = ["lumestrio", "relaystrio"];
 
 const devices = ref<DevicePublic[]>([]);
 const groups = ref<GroupPublic[]>([]);
-const selectedUuids = ref<Set<string>>(new Set());
+const selectedDeviceIds = ref<Set<string>>(new Set());
 
 const detailModalOpen = ref(false);
 const detailDevice = ref<DevicePublic | null>(null);
@@ -28,9 +34,11 @@ const calendarDetail = ref<CalendarPublic | null>(null);
 
 const formModalOpen = ref(false);
 const formError = ref<string | null>(null);
-const editingUuid = ref<string | null>(null);
+const editingDeviceId = ref<string | null>(null);
+const freeDeviceNumbers = ref<FreeDeviceNumbers>({ relaystrio: [], lumestrio: [] });
 const deviceForm = reactive({
   device_id: "",
+  device_number: null as number | null,
   device_name: "",
   device_type: "lumestrio" as DeviceType,
   active: true,
@@ -43,26 +51,43 @@ const deviceForm = reactive({
   group_id: "",
 });
 
+const availableDeviceNumbers = computed(() => freeDeviceNumbers.value[deviceForm.device_type]);
+
 const allSelected = computed(
-  () => devices.value.length > 0 && selectedUuids.value.size === devices.value.length,
+  () => devices.value.length > 0 && selectedDeviceIds.value.size === devices.value.length,
 );
 
 const existingMaster = computed(
-  () => devices.value.find((d) => d.is_master && d.uuid !== editingUuid.value) ?? null,
+  () => devices.value.find((d) => d.is_master && d.device_id !== editingDeviceId.value) ?? null,
+);
+
+function resetDeviceNumberToFirstAvailable() {
+  deviceForm.device_number = availableDeviceNumbers.value[0] ?? null;
+}
+
+// The free-number pool differs per type, so switching type while creating a
+// device must re-pick a number valid for the newly selected type.
+watch(
+  () => deviceForm.device_type,
+  () => {
+    if (!editingDeviceId.value) {
+      resetDeviceNumberToFirstAvailable();
+    }
+  },
 );
 
 async function loadDevices() {
   const [devicesResult, groupsResult] = await Promise.all([devicesApi.list(), groupsApi.list()]);
   devices.value = devicesResult.data;
   groups.value = groupsResult.data;
-  selectedUuids.value = new Set(
-    [...selectedUuids.value].filter((uuid) => devices.value.some((d) => d.uuid === uuid)),
+  selectedDeviceIds.value = new Set(
+    [...selectedDeviceIds.value].filter((id) => devices.value.some((d) => d.device_id === id)),
   );
 }
 
-function openCreateModal() {
+async function openCreateModal() {
   formError.value = null;
-  editingUuid.value = null;
+  editingDeviceId.value = null;
   deviceForm.device_id = "";
   deviceForm.device_name = "";
   deviceForm.device_type = "lumestrio";
@@ -74,12 +99,14 @@ function openCreateModal() {
   deviceForm.master_ip = "";
   deviceForm.audiofile = "";
   deviceForm.group_id = "";
+  freeDeviceNumbers.value = await devicesApi.freeDeviceNumbers();
+  resetDeviceNumberToFirstAvailable();
   formModalOpen.value = true;
 }
 
 function openEditModal(device: DevicePublic) {
   formError.value = null;
-  editingUuid.value = device.uuid;
+  editingDeviceId.value = device.device_id;
   deviceForm.device_id = device.device_id;
   deviceForm.device_name = device.device_name;
   deviceForm.device_type = device.device_type;
@@ -101,28 +128,42 @@ function closeFormModal() {
 
 async function submitDeviceForm() {
   formError.value = null;
-  if (!deviceForm.device_id.trim() || !deviceForm.device_name.trim()) {
-    formError.value = "Le nom de série et le nom sur le projet sont obligatoires.";
+  if (!deviceForm.device_name.trim()) {
+    formError.value = "Le nom sur le projet est obligatoire.";
     return;
   }
-  const payload = {
-    device_id: deviceForm.device_id.trim(),
-    device_name: deviceForm.device_name.trim(),
-    device_type: deviceForm.device_type,
-    active: deviceForm.active,
-    is_master: deviceForm.is_master,
-    handles_audio: deviceForm.device_type === "lumestrio" ? deviceForm.handles_audio : false,
-    handles_dmx: deviceForm.device_type === "lumestrio" ? deviceForm.handles_dmx : false,
-    ip: deviceForm.ip.trim() || null,
-    master_ip: deviceForm.master_ip.trim() || null,
-    audiofile: deviceForm.audiofile.trim() || null,
-    group_id: deviceForm.group_id || null,
-  };
   try {
-    if (editingUuid.value) {
-      await devicesApi.update(editingUuid.value, payload);
+    if (editingDeviceId.value) {
+      await devicesApi.update(editingDeviceId.value, {
+        device_name: deviceForm.device_name.trim(),
+        device_type: deviceForm.device_type,
+        active: deviceForm.active,
+        is_master: deviceForm.is_master,
+        handles_audio: deviceForm.device_type === "lumestrio" ? deviceForm.handles_audio : false,
+        handles_dmx: deviceForm.device_type === "lumestrio" ? deviceForm.handles_dmx : false,
+        ip: deviceForm.ip.trim() || null,
+        master_ip: deviceForm.master_ip.trim() || null,
+        audiofile: deviceForm.audiofile.trim() || null,
+        group_id: deviceForm.group_id || null,
+      });
     } else {
-      await devicesApi.create(payload);
+      if (deviceForm.device_number === null) {
+        formError.value = "Aucun numéro disponible pour ce type d'appareil.";
+        return;
+      }
+      await devicesApi.create({
+        device_type: deviceForm.device_type,
+        device_number: deviceForm.device_number,
+        device_name: deviceForm.device_name.trim(),
+        active: deviceForm.active,
+        is_master: deviceForm.is_master,
+        handles_audio: deviceForm.device_type === "lumestrio" ? deviceForm.handles_audio : false,
+        handles_dmx: deviceForm.device_type === "lumestrio" ? deviceForm.handles_dmx : false,
+        ip: deviceForm.ip.trim() || null,
+        master_ip: deviceForm.master_ip.trim() || null,
+        audiofile: deviceForm.audiofile.trim() || null,
+        group_id: deviceForm.group_id || null,
+      });
     }
     formModalOpen.value = false;
     await loadDevices();
@@ -131,8 +172,8 @@ async function submitDeviceForm() {
   }
 }
 
-async function openDetailModal(uuid: string) {
-  detailDevice.value = await devicesApi.get(uuid);
+async function openDetailModal(deviceId: string) {
+  detailDevice.value = await devicesApi.get(deviceId);
   detailModalOpen.value = true;
 }
 
@@ -167,38 +208,38 @@ function openCalendarFromGroup() {
   }
 }
 
-async function openMasterDetailFromForm(uuid: string) {
+async function openMasterDetailFromForm(deviceId: string) {
   closeFormModal();
-  await openDetailModal(uuid);
+  await openDetailModal(deviceId);
 }
 
-async function unsetMaster(uuid: string) {
-  await devicesApi.update(uuid, { is_master: false });
+async function unsetMaster(deviceId: string) {
+  await devicesApi.update(deviceId, { is_master: false });
   await loadDevices();
-  detailDevice.value = await devicesApi.get(uuid);
+  detailDevice.value = await devicesApi.get(deviceId);
 }
 
 async function toggleActive(device: DevicePublic) {
-  await devicesApi.update(device.uuid, { active: !device.active });
+  await devicesApi.update(device.device_id, { active: !device.active });
   await loadDevices();
 }
 
-function toggleSelection(uuid: string) {
-  if (selectedUuids.value.has(uuid)) {
-    selectedUuids.value.delete(uuid);
+function toggleSelection(deviceId: string) {
+  if (selectedDeviceIds.value.has(deviceId)) {
+    selectedDeviceIds.value.delete(deviceId);
   } else {
-    selectedUuids.value.add(uuid);
+    selectedDeviceIds.value.add(deviceId);
   }
 }
 
 function toggleSelectAll() {
-  selectedUuids.value = allSelected.value
+  selectedDeviceIds.value = allSelected.value
     ? new Set()
-    : new Set(devices.value.map((d) => d.uuid));
+    : new Set(devices.value.map((d) => d.device_id));
 }
 
 async function removeSelectedDevices() {
-  await devicesApi.delete([...selectedUuids.value]);
+  await devicesApi.delete([...selectedDeviceIds.value]);
   await loadDevices();
 }
 
@@ -208,8 +249,8 @@ onMounted(loadDevices);
 <template>
   <div class="bulk-actions">
     <button type="button" @click="openCreateModal">Créer un appareil</button>
-    <button class="clear-selection" :disabled="selectedUuids.size === 0" @click="removeSelectedDevices">
-      Effacer la sélection ({{ selectedUuids.size }})
+    <button class="clear-selection" :disabled="selectedDeviceIds.size === 0" @click="removeSelectedDevices">
+      Effacer la sélection ({{ selectedDeviceIds.size }})
     </button>
   </div>
 
@@ -227,17 +268,17 @@ onMounted(loadDevices);
       </tr>
     </thead>
     <tbody>
-      <tr v-for="device in devices" :key="device.uuid">
+      <tr v-for="device in devices" :key="device.device_id">
         <td>
           <input
             type="checkbox"
-            :checked="selectedUuids.has(device.uuid)"
-            @change="toggleSelection(device.uuid)"
+            :checked="selectedDeviceIds.has(device.device_id)"
+            @change="toggleSelection(device.device_id)"
           />
         </td>
         <td>{{ device.device_id }}</td>
         <td>
-          <a href="#" class="item-link" @click.prevent="openDetailModal(device.uuid)">
+          <a href="#" class="item-link" @click.prevent="openDetailModal(device.device_id)">
             {{ device.device_name }}
           </a>
         </td>
@@ -286,14 +327,12 @@ onMounted(loadDevices);
         <dd>{{ detailDevice.device_id }}</dd>
         <dt>Type d'appareil</dt>
         <dd>{{ detailDevice.device_type }}</dd>
-        <dt>UUID</dt>
-        <dd>{{ detailDevice.uuid }}</dd>
         <dt>Actif</dt>
         <dd>{{ detailDevice.active ? "ON" : "OFF" }}</dd>
         <dt>Maître</dt>
         <dd>
           {{ detailDevice.is_master ? "Oui" : "Non" }}
-          <button v-if="detailDevice.is_master" type="button" @click="unsetMaster(detailDevice.uuid)">
+          <button v-if="detailDevice.is_master" type="button" @click="unsetMaster(detailDevice.device_id)">
             Retirer le statut de maître
           </button>
         </dd>
@@ -358,12 +397,12 @@ onMounted(loadDevices);
       <button type="button" class="modal-close" aria-label="Fermer" @click="closeFormModal">
         ✕
       </button>
-      <h2>{{ editingUuid ? "Modifier le lumestrio" : "Configurer un nouveau lumestrio" }}</h2>
+      <h2>{{ editingDeviceId ? "Modifier le lumestrio" : "Configurer un nouveau lumestrio" }}</h2>
       <p class="mandatory-hint">* Champ obligatoire</p>
       <form class="create-device-form" @submit.prevent="submitDeviceForm">
-        <label>
-          Nom de série <span class="mandatory">*</span>
-          <input v-model="deviceForm.device_id" required />
+        <label v-if="editingDeviceId">
+          Nom de série
+          <input :value="deviceForm.device_id" disabled />
         </label>
         <label>
           Nom sur le projet <span class="mandatory">*</span>
@@ -374,6 +413,17 @@ onMounted(loadDevices);
           <select v-model="deviceForm.device_type" required>
             <option v-for="type in deviceTypes" :key="type" :value="type">
               {{ type }}
+            </option>
+          </select>
+        </label>
+        <label v-if="!editingDeviceId">
+          Numéro <span class="mandatory">*</span>
+          <select v-model.number="deviceForm.device_number" required>
+            <option v-if="availableDeviceNumbers.length === 0" :value="null" disabled>
+              Aucun numéro disponible
+            </option>
+            <option v-for="number in availableDeviceNumbers" :key="number" :value="number">
+              {{ number }}
             </option>
           </select>
         </label>
@@ -397,7 +447,7 @@ onMounted(loadDevices);
         </template>
         <p v-if="deviceForm.is_master && existingMaster" class="master-warning">
           Un maître existe déjà : appareil
-          <a href="#" class="item-link" @click.prevent="openMasterDetailFromForm(existingMaster.uuid)">
+          <a href="#" class="item-link" @click.prevent="openMasterDetailFromForm(existingMaster.device_id)">
             {{ existingMaster.device_name }}
           </a>
         </p>
@@ -425,7 +475,7 @@ onMounted(loadDevices);
         <p v-if="formError" class="error">{{ formError }}</p>
         <div class="modal-actions">
           <button type="button" @click="closeFormModal">Annuler</button>
-          <button type="submit">{{ editingUuid ? "Mettre à jour" : "Enregistrer" }}</button>
+          <button type="submit">{{ editingDeviceId ? "Mettre à jour" : "Enregistrer" }}</button>
         </div>
       </form>
     </div>

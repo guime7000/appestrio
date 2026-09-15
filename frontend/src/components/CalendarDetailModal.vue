@@ -19,8 +19,6 @@ const emit = defineEmits<{
       </button>
       <h2>{{ calendar.label }}</h2>
       <dl class="detail-list">
-        <dt>UUID</dt>
-        <dd>{{ calendar.uuid }}</dd>
         <dt>Jours d'application</dt>
         <dd>{{ weekdayLabels(calendar.weekdays) }}</dd>
         <dt>Allumages</dt>

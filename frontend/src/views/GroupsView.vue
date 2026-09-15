@@ -23,7 +23,7 @@ const calendars = ref<CalendarSummaryPublic[]>([]);
 const calendarLabels = ref<Record<string, string>>({});
 const newGroupLabel = ref("");
 const editingGroupUuid = ref<string | null>(null);
-const selectedDeviceUuids = ref<Set<string>>(new Set());
+const selectedDeviceIds = ref<Set<string>>(new Set());
 const selectedGroupUuids = ref<Set<string>>(new Set());
 
 const detailModalOpen = ref(false);
@@ -74,14 +74,14 @@ function isGroupFullyActive(group: GroupPublic): boolean {
 }
 
 async function toggleDeviceActive(device: GroupDevicePublic) {
-  await devicesApi.update(device.uuid, { active: !device.active });
+  await devicesApi.update(device.device_id, { active: !device.active });
   await loadAll();
 }
 
 async function toggleGroupDevicesActive(group: GroupPublic) {
   const nextActive = !isGroupFullyActive(group);
   await Promise.all(
-    group.devices.map((device) => devicesApi.update(device.uuid, { active: nextActive })),
+    group.devices.map((device) => devicesApi.update(device.device_id, { active: nextActive })),
   );
   await loadAll();
 }
@@ -120,8 +120,8 @@ function closeDetailModal() {
   detailModalOpen.value = false;
 }
 
-async function openDeviceDetailModal(uuid: string) {
-  deviceDetail.value = await devicesApi.get(uuid);
+async function openDeviceDetailModal(deviceId: string) {
+  deviceDetail.value = await devicesApi.get(deviceId);
   deviceDetailModalOpen.value = true;
 }
 
@@ -191,20 +191,20 @@ function toggleExpand(uuid: string) {
 
 function openDevicePicker(group: GroupPublic) {
   editingGroupUuid.value = group.uuid;
-  selectedDeviceUuids.value = new Set(group.devices.map((d) => d.uuid));
+  selectedDeviceIds.value = new Set(group.devices.map((d) => d.device_id));
 }
 
-function toggleDeviceSelection(uuid: string) {
-  if (selectedDeviceUuids.value.has(uuid)) {
-    selectedDeviceUuids.value.delete(uuid);
+function toggleDeviceSelection(deviceId: string) {
+  if (selectedDeviceIds.value.has(deviceId)) {
+    selectedDeviceIds.value.delete(deviceId);
   } else {
-    selectedDeviceUuids.value.add(uuid);
+    selectedDeviceIds.value.add(deviceId);
   }
 }
 
 async function saveDeviceSelection() {
   if (!editingGroupUuid.value) return;
-  await groupsApi.setDevices(editingGroupUuid.value, [...selectedDeviceUuids.value]);
+  await groupsApi.setDevices(editingGroupUuid.value, [...selectedDeviceIds.value]);
   editingGroupUuid.value = null;
   await loadAll();
 }
@@ -315,12 +315,12 @@ onMounted(async () => {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="device in group.devices" :key="device.uuid">
+                <tr v-for="device in group.devices" :key="device.device_id">
                   <td>
                     <a
                       href="#"
                       class="item-link"
-                      @click.prevent="openDeviceDetailModal(device.uuid)"
+                      @click.prevent="openDeviceDetailModal(device.device_id)"
                     >
                       {{ device.device_name }}
                     </a>
@@ -355,11 +355,11 @@ onMounted(async () => {
 
   <div v-if="editingGroupUuid" class="picker">
     <h2>Appareils du groupe</h2>
-    <label v-for="device in allDevices" :key="device.uuid" class="picker-row">
+    <label v-for="device in allDevices" :key="device.device_id" class="picker-row">
       <input
         type="checkbox"
-        :checked="selectedDeviceUuids.has(device.uuid)"
-        @change="toggleDeviceSelection(device.uuid)"
+        :checked="selectedDeviceIds.has(device.device_id)"
+        @change="toggleDeviceSelection(device.device_id)"
       />
       {{ deviceLabel(device) }}
     </label>
@@ -376,8 +376,6 @@ onMounted(async () => {
       </button>
       <h2>{{ detailGroup.label }}</h2>
       <dl class="detail-list">
-        <dt>UUID</dt>
-        <dd>{{ detailGroup.uuid }}</dd>
         <dt>Dernière modification</dt>
         <dd>{{ detailGroup.updated_at }}</dd>
         <dt>Calendrier</dt>
@@ -396,8 +394,8 @@ onMounted(async () => {
         <dd>
           <span v-if="detailGroup.devices.length === 0">—</span>
           <ul v-else>
-            <li v-for="device in detailGroup.devices" :key="device.uuid">
-              <a href="#" class="item-link" @click.prevent="openDeviceDetailModal(device.uuid)">
+            <li v-for="device in detailGroup.devices" :key="device.device_id">
+              <a href="#" class="item-link" @click.prevent="openDeviceDetailModal(device.device_id)">
                 {{ device.device_name }}
               </a>
             </li>

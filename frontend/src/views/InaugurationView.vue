@@ -11,7 +11,7 @@ async function setAllDevicesActive(active: boolean) {
   try {
     const { data: devices } = await devicesApi.list();
     await Promise.all(
-      devices.map((device) => devicesApi.update(device.uuid, { active })),
+      devices.map((device) => devicesApi.update(device.device_id, { active })),
     );
   } finally {
     busy.value = false;

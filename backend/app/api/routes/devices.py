@@ -11,7 +11,9 @@ from app.models import (
     DeviceCreate,
     DevicePublic,
     DevicesPublic,
+    DeviceType,
     DeviceUpdate,
+    FreeDeviceNumbers,
     Group,
     Message,
 )
@@ -42,6 +44,15 @@ def list_devices(session: SessionDep, skip: int = 0, limit: int = 100) -> Device
     devices, count = crud.get_devices(session=session, skip=skip, limit=limit)
     return DevicesPublic(
         data=[crud.device_to_public(device) for device in devices], count=count
+    )
+
+
+@router.get("/free_devices_id", response_model=FreeDeviceNumbers)
+def get_free_devices_id(session: SessionDep) -> FreeDeviceNumbers:
+    free_numbers = crud.get_free_device_numbers(session=session)
+    return FreeDeviceNumbers(
+        relaystrio=free_numbers[DeviceType.RELAYSTRIO],
+        lumestrio=free_numbers[DeviceType.LUMESTRIO],
     )
 
 

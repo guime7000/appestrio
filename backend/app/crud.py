@@ -4,12 +4,14 @@ from datetime import datetime
 from sqlmodel import Session, func, select
 
 from app.models import (
+    MAX_DEVICES_PER_TYPE,
     Calendar,
     CalendarCreate,
     CalendarUpdate,
     Device,
     DeviceCreate,
     DevicePublic,
+    DeviceType,
     DeviceUpdate,
     Group,
     GroupCreate,
@@ -330,11 +332,31 @@ def set_group_devices(
 
 
 def create_device(*, session: Session, device_create: DeviceCreate) -> Device:
-    db_device = Device.model_validate(device_create)
+    device_id = f"{device_create.device_type.value}{device_create.device_number}"
+    device_data = device_create.model_dump(exclude={"device_number"})
+    db_device = Device.model_validate(device_data, update={"device_id": device_id})
     session.add(db_device)
     session.commit()
     session.refresh(db_device)
     return db_device
+
+
+def get_free_device_numbers(*, session: Session) -> dict[DeviceType, list[int]]:
+    free_numbers: dict[DeviceType, list[int]] = {}
+    for device_type in DeviceType:
+        prefix = device_type.value
+        used = set()
+        devices = session.exec(
+            select(Device).where(Device.device_type == device_type)
+        ).all()
+        for device in devices:
+            suffix = device.device_id.removeprefix(prefix)
+            if suffix.isdigit():
+                used.add(int(suffix))
+        free_numbers[device_type] = [
+            number for number in range(MAX_DEVICES_PER_TYPE) if number not in used
+        ]
+    return free_numbers
 
 
 def get_device(*, session: Session, device_uuid: uuid.UUID) -> Device | None:

@@ -10,7 +10,7 @@ DEVICES_URL = f"{settings.API_V1_STR}/devices/"
 
 
 def test_create_device(client: TestClient) -> None:
-    response = client.post(DEVICES_URL, json=device_payload(device_id="lumestrio13"))
+    response = client.post(DEVICES_URL, json=device_payload(device_number=13))
 
     assert response.status_code == 201
     content = response.json()
@@ -24,8 +24,45 @@ def test_create_device(client: TestClient) -> None:
     assert "updated_at" in content
 
 
+def test_create_device_rejects_negative_device_number(client: TestClient) -> None:
+    response = client.post(DEVICES_URL, json=device_payload(device_number=-1))
+
+    assert response.status_code == 422
+
+
+def test_create_device_rejects_device_number_at_or_above_ceiling(client: TestClient) -> None:
+    response = client.post(DEVICES_URL, json=device_payload(device_number=32))
+
+    assert response.status_code == 422
+
+
+def test_patch_cannot_change_device_id(client: TestClient) -> None:
+    created = client.post(DEVICES_URL, json=device_payload()).json()
+
+    response = client.patch(
+        f"{DEVICES_URL}{created['uuid']}", json={"device_id": "somethingelse"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["device_id"] == created["device_id"]
+
+
+def test_free_devices_id_excludes_taken_numbers(client: TestClient) -> None:
+    client.post(DEVICES_URL, json=device_payload(device_type="lumestrio", device_number=0))
+    client.post(DEVICES_URL, json=device_payload(device_type="relaystrio", device_number=3))
+
+    response = client.get(f"{DEVICES_URL}free_devices_id")
+
+    assert response.status_code == 200
+    content = response.json()
+    assert 0 not in content["lumestrio"]
+    assert 1 in content["lumestrio"]
+    assert 3 not in content["relaystrio"]
+    assert 0 in content["relaystrio"]
+
+
 def test_create_device_duplicate_device_id(client: TestClient) -> None:
-    payload = device_payload(device_id="lumestrio13")
+    payload = device_payload(device_number=13)
     client.post(DEVICES_URL, json=payload)
 
     response = client.post(DEVICES_URL, json=payload)
@@ -153,8 +190,8 @@ def test_delete_devices_requires_at_least_one_uuid(client: TestClient) -> None:
 
 
 def test_delete_devices_bulk(client: TestClient) -> None:
-    first = client.post(DEVICES_URL, json=device_payload(device_id="lumestrio1")).json()
-    second = client.post(DEVICES_URL, json=device_payload(device_id="lumestrio2")).json()
+    first = client.post(DEVICES_URL, json=device_payload(device_number=1)).json()
+    second = client.post(DEVICES_URL, json=device_payload(device_number=2)).json()
 
     response = client.request(
         "DELETE", DEVICES_URL, json={"uuids": [first["uuid"], second["uuid"]]}

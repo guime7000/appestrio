@@ -19,8 +19,23 @@ class DeviceType(str, Enum):
     RELAYSTRIO = "relaystrio"
 
 
+# How many devices of each type can exist. Not a hardware limit (the LoRa
+# address is one byte, with 255 reserved for broadcast) -- it's the
+# legacy-chosen ceiling, kept here as the single place that defines it.
+MAX_DEVICES_PER_TYPE = 32
+
+# Explicit type -> LoRa address-index mapping. Deliberately not derived from
+# DeviceType's enum declaration order (LUMESTRIO is declared first above,
+# which would silently invert this if position were used instead). Matches
+# legacy's LoraDeviceType.Relaystrio=0/Lumestrio=1, which the burger
+# firmware also hardcodes.
+LORA_TYPE_INDEX: dict[DeviceType, int] = {
+    DeviceType.RELAYSTRIO: 0,
+    DeviceType.LUMESTRIO: 1,
+}
+
+
 class DeviceBase(SQLModel):
-    device_id: str = Field(index=True, unique=True, min_length=1, max_length=255)
     device_name: str = Field(min_length=1, max_length=255)
     # values_callable stores/reads the enum's *value* ("lumestrio") instead of
     # SQLAlchemy's default of the member *name* ("LUMESTRIO"), matching the
@@ -54,6 +69,7 @@ class Device(DeviceBase, table=True):
     )
 
     uuid: UUID = Field(default_factory=uuid4, primary_key=True)
+    device_id: str = Field(index=True, unique=True, min_length=1, max_length=255)
     group_id: UUID | None = Field(default=None, foreign_key="groups.uuid")
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
@@ -68,10 +84,16 @@ class Device(DeviceBase, table=True):
 
 class DeviceCreate(DeviceBase):
     group_id: UUID | None = None
+    # device_id is derived server-side from device_type + device_number
+    # (e.g. "lumestrio3"), never supplied directly -- this is what keeps the
+    # LoRa address derivation safe (parseable and unique by construction).
+    device_number: int = Field(ge=0, lt=MAX_DEVICES_PER_TYPE)
 
 
 class DeviceUpdate(SQLModel):
-    device_id: str | None = Field(default=None, min_length=1, max_length=255)
+    # device_id is immutable after creation: it's about to become the thing
+    # the LoRa address is derived from, so a live, radio-addressed device
+    # must never be renamed out from under its assigned address.
     device_name: str | None = Field(default=None, min_length=1, max_length=255)
     device_type: DeviceType | None = None
     active: bool | None = None
@@ -108,3 +130,8 @@ class DevicePublic(SQLModel):
 class DevicesPublic(SQLModel):
     data: list[DevicePublic]
     count: int
+
+
+class FreeDeviceNumbers(SQLModel):
+    relaystrio: list[int]
+    lumestrio: list[int]

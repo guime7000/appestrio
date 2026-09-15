@@ -11,12 +11,16 @@ from app.models.calendars import (
 )
 from app.models.common import BulkDeleteRequest, Message, utcnow
 from app.models.devices import (
+    LORA_TYPE_INDEX,
+    MAX_DEVICES_PER_TYPE,
     Device,
     DeviceBase,
     DeviceCreate,
     DevicePublic,
     DevicesPublic,
+    DeviceType,
     DeviceUpdate,
+    FreeDeviceNumbers,
 )
 from app.models.groups import (
     Group,
@@ -50,6 +54,8 @@ IgnitionPreset.model_rebuild(_types_namespace={"Calendar": Calendar})
 
 __all__ = [
     "SQLModel",
+    "LORA_TYPE_INDEX",
+    "MAX_DEVICES_PER_TYPE",
     "BulkDeleteRequest",
     "Calendar",
     "CalendarBase",
@@ -63,7 +69,9 @@ __all__ = [
     "DeviceCreate",
     "DevicePublic",
     "DevicesPublic",
+    "DeviceType",
     "DeviceUpdate",
+    "FreeDeviceNumbers",
     "Group",
     "GroupBase",
     "GroupCreate",

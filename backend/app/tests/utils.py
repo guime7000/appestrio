@@ -1,9 +1,15 @@
+import itertools
 import uuid
 from typing import Any
 
 from sqlmodel import Session
 
 from app.models import Calendar, Group, IgnitionPreset
+
+# Monotonic, so consecutive device_payload() calls within a single test
+# never collide on (device_type, device_number) -- each test gets a fresh
+# in-memory DB, so wrap-around across tests is not a concern.
+_device_numbers = itertools.count()
 
 
 def create_calendar(session: Session, **overrides: Any) -> Calendar:
@@ -82,7 +88,7 @@ def group_payload(**overrides: Any) -> dict[str, Any]:
 
 def device_payload(**overrides: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {
-        "device_id": f"lumestrio-{uuid.uuid4().hex[:8]}",
+        "device_number": next(_device_numbers) % 32,
         "device_name": "Le 13e lumestrio",
         "device_type": "lumestrio",
         "active": True,

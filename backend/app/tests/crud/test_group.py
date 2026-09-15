@@ -106,10 +106,10 @@ def test_set_group_devices(session: Session) -> None:
     )
 
     updated = crud.set_group_devices(
-        session=session, db_group=group, device_uuids=[device.uuid]
+        session=session, db_group=group, device_ids=[device.device_id]
     )
 
-    assert [d.uuid for d in updated.devices] == [device.uuid]
+    assert [d.device_id for d in updated.devices] == [device.device_id]
     session.refresh(device)
     assert device.group_id == group.uuid
 
@@ -123,7 +123,7 @@ def test_set_group_devices_unassigns_removed_devices(session: Session) -> None:
         device_create=DeviceCreate(**device_payload(group_id=group.uuid)),
     )
 
-    crud.set_group_devices(session=session, db_group=group, device_uuids=[])
+    crud.set_group_devices(session=session, db_group=group, device_ids=[])
 
     session.refresh(device)
     assert device.group_id is None
@@ -133,15 +133,15 @@ def test_set_group_devices_not_found(session: Session) -> None:
     group = crud.create_group(
         session=session, group_create=GroupCreate(**group_payload())
     )
-    missing_uuid = uuid.uuid4()
+    missing_device_id = "lumestrio99"
 
     try:
         crud.set_group_devices(
-            session=session, db_group=group, device_uuids=[missing_uuid]
+            session=session, db_group=group, device_ids=[missing_device_id]
         )
         raised = False
     except crud.DeviceNotFoundError as exc:
         raised = True
-        assert exc.missing_uuids == [missing_uuid]
+        assert exc.missing_device_ids == [missing_device_id]
 
     assert raised

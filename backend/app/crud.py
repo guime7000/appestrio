@@ -26,8 +26,8 @@ from app.models.ignition_presets import DATE_FORMAT, TIME_FORMAT
 
 
 class DeviceNotFoundError(Exception):
-    def __init__(self, missing_uuids: list[uuid.UUID]) -> None:
-        self.missing_uuids = missing_uuids
+    def __init__(self, missing_device_ids: list[str]) -> None:
+        self.missing_device_ids = missing_device_ids
 
 
 class IgnitionPresetOverlapError(Exception):
@@ -307,18 +307,18 @@ def delete_groups(*, session: Session, db_groups: list[Group]) -> None:
 
 
 def set_group_devices(
-    *, session: Session, db_group: Group, device_uuids: list[uuid.UUID]
+    *, session: Session, db_group: Group, device_ids: list[str]
 ) -> Group:
-    unique_uuids = set(device_uuids)
+    unique_ids = set(device_ids)
     devices = session.exec(
-        select(Device).where(Device.uuid.in_(unique_uuids))  # type: ignore[attr-defined]
+        select(Device).where(Device.device_id.in_(unique_ids))  # type: ignore[attr-defined]
     ).all()
-    if len(devices) != len(unique_uuids):
-        missing = unique_uuids - {device.uuid for device in devices}
+    if len(devices) != len(unique_ids):
+        missing = unique_ids - {device.device_id for device in devices}
         raise DeviceNotFoundError(sorted(missing))
 
     for device in list(db_group.devices):
-        if device.uuid not in unique_uuids:
+        if device.device_id not in unique_ids:
             device.group_id = None
             session.add(device)
 
@@ -363,6 +363,10 @@ def get_device(*, session: Session, device_uuid: uuid.UUID) -> Device | None:
     return session.get(Device, device_uuid)
 
 
+def get_device_by_device_id(*, session: Session, device_id: str) -> Device | None:
+    return session.exec(select(Device).where(Device.device_id == device_id)).first()
+
+
 def get_devices(
     *, session: Session, skip: int = 0, limit: int = 100
 ) -> tuple[list[Device], int]:
@@ -388,11 +392,11 @@ def delete_device(*, session: Session, db_device: Device) -> None:
     session.commit()
 
 
-def get_devices_by_uuids(*, session: Session, uuids: list[uuid.UUID]) -> list[Device]:
-    unique_uuids = set(uuids)
+def get_devices_by_device_ids(*, session: Session, device_ids: list[str]) -> list[Device]:
+    unique_ids = set(device_ids)
     return list(
         session.exec(
-            select(Device).where(Device.uuid.in_(unique_uuids))  # type: ignore[attr-defined]
+            select(Device).where(Device.device_id.in_(unique_ids))  # type: ignore[attr-defined]
         ).all()
     )
 
@@ -406,7 +410,6 @@ def delete_devices(*, session: Session, db_devices: list[Device]) -> None:
 def device_to_public(device: Device) -> DevicePublic:
     calendar = device.group.calendar if device.group else None
     return DevicePublic(
-        uuid=device.uuid,
         device_id=device.device_id,
         device_name=device.device_name,
         device_type=device.device_type,

@@ -107,7 +107,9 @@ class DeviceUpdate(SQLModel):
 
 
 class DevicePublic(SQLModel):
-    uuid: UUID
+    # No `uuid`: the device's DB primary key is internal only. `device_id`
+    # (unique, immutable, see DeviceUpdate above) is the identifier clients
+    # use to address a device, both here and in the API's URL paths.
     device_id: str
     device_name: str
     device_type: DeviceType
@@ -135,3 +137,7 @@ class DevicesPublic(SQLModel):
 class FreeDeviceNumbers(SQLModel):
     relaystrio: list[int]
     lumestrio: list[int]
+
+
+class DeviceBulkDeleteRequest(SQLModel):
+    device_ids: list[str] = Field(min_length=1)

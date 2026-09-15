@@ -15,5 +15,9 @@ dist/
 
 .DS_Store
 
-# Exclude Specifications
 Specifications/*
+bruno/Devices/Delete Device.bru
+bruno/Devices/Create Device.bru
+bruno/Devices/Get Device.bru
+bruno/Devices/Update Device.bru
+bruno/Groups/Associate devices.bru

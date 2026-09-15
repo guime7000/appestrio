@@ -20,7 +20,7 @@ def test_create_device(client: TestClient) -> None:
     assert content["group_id"] is None
     assert content["calendar"] is None
     assert content["is_master"] is False
-    assert "uuid" in content
+    assert "uuid" not in content
     assert "updated_at" in content
 
 
@@ -40,7 +40,7 @@ def test_patch_cannot_change_device_id(client: TestClient) -> None:
     created = client.post(DEVICES_URL, json=device_payload()).json()
 
     response = client.patch(
-        f"{DEVICES_URL}{created['uuid']}", json={"device_id": "somethingelse"}
+        f"{DEVICES_URL}{created['device_id']}", json={"device_id": "somethingelse"}
     )
 
     assert response.status_code == 200
@@ -85,7 +85,9 @@ def test_update_device_to_master_conflicts_with_existing_master(
     client.post(DEVICES_URL, json=device_payload(is_master=True))
     other = client.post(DEVICES_URL, json=device_payload()).json()
 
-    response = client.patch(f"{DEVICES_URL}{other['uuid']}", json={"is_master": True})
+    response = client.patch(
+        f"{DEVICES_URL}{other['device_id']}", json={"is_master": True}
+    )
 
     assert response.status_code == 409
     assert response.json()["detail"] == "Another device is already the master"
@@ -119,14 +121,14 @@ def test_create_device_with_group_and_calendar(
 def test_get_device(client: TestClient) -> None:
     created = client.post(DEVICES_URL, json=device_payload()).json()
 
-    response = client.get(f"{DEVICES_URL}{created['uuid']}")
+    response = client.get(f"{DEVICES_URL}{created['device_id']}")
 
     assert response.status_code == 200
-    assert response.json()["uuid"] == created["uuid"]
+    assert response.json()["device_id"] == created["device_id"]
 
 
 def test_get_device_not_found(client: TestClient) -> None:
-    response = client.get(f"{DEVICES_URL}{uuid.uuid4()}")
+    response = client.get(f"{DEVICES_URL}nosuchdevice")
 
     assert response.status_code == 404
 
@@ -147,7 +149,7 @@ def test_update_device(client: TestClient) -> None:
     created = client.post(DEVICES_URL, json=device_payload()).json()
 
     response = client.patch(
-        f"{DEVICES_URL}{created['uuid']}", json={"audiofile": "new_audio.mp3"}
+        f"{DEVICES_URL}{created['device_id']}", json={"audiofile": "new_audio.mp3"}
     )
 
     assert response.status_code == 200
@@ -158,7 +160,7 @@ def test_update_device(client: TestClient) -> None:
 
 def test_update_device_not_found(client: TestClient) -> None:
     response = client.patch(
-        f"{DEVICES_URL}{uuid.uuid4()}", json={"audiofile": "new_audio.mp3"}
+        f"{DEVICES_URL}nosuchdevice", json={"audiofile": "new_audio.mp3"}
     )
 
     assert response.status_code == 404
@@ -167,24 +169,26 @@ def test_update_device_not_found(client: TestClient) -> None:
 def test_delete_device(client: TestClient) -> None:
     created = client.post(DEVICES_URL, json=device_payload()).json()
 
-    response = client.request("DELETE", DEVICES_URL, json={"uuids": [created["uuid"]]})
+    response = client.request(
+        "DELETE", DEVICES_URL, json={"device_ids": [created["device_id"]]}
+    )
     assert response.status_code == 200
     assert response.json()["message"] == "1 device(s) deleted successfully"
 
-    get_response = client.get(f"{DEVICES_URL}{created['uuid']}")
+    get_response = client.get(f"{DEVICES_URL}{created['device_id']}")
     assert get_response.status_code == 404
 
 
 def test_delete_device_not_found(client: TestClient) -> None:
     response = client.request(
-        "DELETE", DEVICES_URL, json={"uuids": [str(uuid.uuid4())]}
+        "DELETE", DEVICES_URL, json={"device_ids": ["nosuchdevice"]}
     )
 
     assert response.status_code == 404
 
 
 def test_delete_devices_requires_at_least_one_uuid(client: TestClient) -> None:
-    response = client.request("DELETE", DEVICES_URL, json={"uuids": []})
+    response = client.request("DELETE", DEVICES_URL, json={"device_ids": []})
 
     assert response.status_code == 422
 
@@ -194,7 +198,9 @@ def test_delete_devices_bulk(client: TestClient) -> None:
     second = client.post(DEVICES_URL, json=device_payload(device_number=2)).json()
 
     response = client.request(
-        "DELETE", DEVICES_URL, json={"uuids": [first["uuid"], second["uuid"]]}
+        "DELETE",
+        DEVICES_URL,
+        json={"device_ids": [first["device_id"], second["device_id"]]},
     )
 
     assert response.status_code == 200
@@ -204,10 +210,11 @@ def test_delete_devices_bulk(client: TestClient) -> None:
 
 def test_delete_devices_bulk_not_found(client: TestClient) -> None:
     created = client.post(DEVICES_URL, json=device_payload()).json()
-    missing_uuid = str(uuid.uuid4())
 
     response = client.request(
-        "DELETE", DEVICES_URL, json={"uuids": [created["uuid"], missing_uuid]}
+        "DELETE",
+        DEVICES_URL,
+        json={"device_ids": [created["device_id"], "nosuchdevice"]},
     )
 
     assert response.status_code == 404

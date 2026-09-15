@@ -52,7 +52,7 @@ def test_get_group_includes_devices(client: TestClient, session: Session) -> Non
     assert response.status_code == 200
     devices = response.json()["devices"]
     assert len(devices) == 1
-    assert devices[0]["uuid"] == device["uuid"]
+    assert devices[0]["device_id"] == device["device_id"]
     assert devices[0]["device_name"] == device["device_name"]
     assert devices[0]["active"] == device["active"]
     assert devices[0]["handles_audio"] is True
@@ -179,13 +179,13 @@ def test_set_group_devices(client: TestClient, session: Session) -> None:
 
     response = client.patch(
         f"{GROUPS_URL}{group.uuid}/devices",
-        json={"device_uuids": [device["uuid"]]},
+        json={"device_ids": [device["device_id"]]},
     )
 
     assert response.status_code == 200
     content = response.json()
     assert content["count"] == 1
-    assert content["data"][0]["uuid"] == device["uuid"]
+    assert content["data"][0]["device_id"] == device["device_id"]
     assert content["data"][0]["group"] == group.label
 
 
@@ -198,13 +198,13 @@ def test_set_group_devices_unassigns_removed_devices(
     ).json()
 
     response = client.patch(
-        f"{GROUPS_URL}{group.uuid}/devices", json={"device_uuids": []}
+        f"{GROUPS_URL}{group.uuid}/devices", json={"device_ids": []}
     )
 
     assert response.status_code == 200
     assert response.json()["count"] == 0
 
-    get_device = client.get(f"{DEVICES_URL}{device['uuid']}")
+    get_device = client.get(f"{DEVICES_URL}{device['device_id']}")
     assert get_device.json()["group"] is None
 
 
@@ -215,7 +215,7 @@ def test_set_group_devices_with_unknown_device(
 
     response = client.patch(
         f"{GROUPS_URL}{group.uuid}/devices",
-        json={"device_uuids": [str(uuid.uuid4())]},
+        json={"device_ids": ["nosuchdevice"]},
     )
 
     assert response.status_code == 404
@@ -223,7 +223,7 @@ def test_set_group_devices_with_unknown_device(
 
 def test_set_group_devices_group_not_found(client: TestClient) -> None:
     response = client.patch(
-        f"{GROUPS_URL}{uuid.uuid4()}/devices", json={"device_uuids": []}
+        f"{GROUPS_URL}{uuid.uuid4()}/devices", json={"device_ids": []}
     )
 
     assert response.status_code == 404

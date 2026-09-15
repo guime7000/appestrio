@@ -65,12 +65,12 @@ def set_group_devices(
     group = _get_group_or_404(session, group_uuid)
     try:
         group = crud.set_group_devices(
-            session=session, db_group=group, device_uuids=devices_in.device_uuids
+            session=session, db_group=group, device_ids=devices_in.device_ids
         )
     except crud.DeviceNotFoundError as exc:
         raise HTTPException(
             status_code=404,
-            detail=f"Device(s) not found: {', '.join(str(u) for u in exc.missing_uuids)}",
+            detail=f"Device(s) not found: {', '.join(exc.missing_device_ids)}",
         )
     return DevicesPublic(
         data=[crud.device_to_public(device) for device in group.devices],

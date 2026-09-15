@@ -6,8 +6,8 @@ from sqlalchemy.exc import IntegrityError
 from app import crud
 from app.api.deps import SessionDep
 from app.models import (
-    BulkDeleteRequest,
     Device,
+    DeviceBulkDeleteRequest,
     DeviceCreate,
     DevicePublic,
     DevicesPublic,
@@ -21,8 +21,8 @@ from app.models import (
 router = APIRouter(prefix="/devices", tags=["devices"])
 
 
-def _get_device_or_404(session: SessionDep, device_uuid: uuid.UUID) -> Device:
-    device = crud.get_device(session=session, device_uuid=device_uuid)
+def _get_device_or_404(session: SessionDep, device_id: str) -> Device:
+    device = crud.get_device_by_device_id(session=session, device_id=device_id)
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
     return device
@@ -56,9 +56,9 @@ def get_free_devices_id(session: SessionDep) -> FreeDeviceNumbers:
     )
 
 
-@router.get("/{device_uuid}", response_model=DevicePublic)
-def get_device(session: SessionDep, device_uuid: uuid.UUID) -> DevicePublic:
-    device = _get_device_or_404(session, device_uuid)
+@router.get("/{device_id}", response_model=DevicePublic)
+def get_device(session: SessionDep, device_id: str) -> DevicePublic:
+    device = _get_device_or_404(session, device_id)
     return crud.device_to_public(device)
 
 
@@ -73,11 +73,11 @@ def create_device(session: SessionDep, device_in: DeviceCreate) -> DevicePublic:
     return crud.device_to_public(device)
 
 
-@router.patch("/{device_uuid}", response_model=DevicePublic)
+@router.patch("/{device_id}", response_model=DevicePublic)
 def update_device(
-    session: SessionDep, device_uuid: uuid.UUID, device_in: DeviceUpdate
+    session: SessionDep, device_id: str, device_in: DeviceUpdate
 ) -> DevicePublic:
-    device = _get_device_or_404(session, device_uuid)
+    device = _get_device_or_404(session, device_id)
     _check_group_exists(session, device_in.group_id)
     try:
         device = crud.update_device(session=session, db_device=device, device_in=device_in)
@@ -88,13 +88,13 @@ def update_device(
 
 
 @router.delete("/", response_model=Message)
-def delete_devices(session: SessionDep, payload: BulkDeleteRequest) -> Message:
-    devices = crud.get_devices_by_uuids(session=session, uuids=payload.uuids)
-    missing = set(payload.uuids) - {device.uuid for device in devices}
+def delete_devices(session: SessionDep, payload: DeviceBulkDeleteRequest) -> Message:
+    devices = crud.get_devices_by_device_ids(session=session, device_ids=payload.device_ids)
+    missing = set(payload.device_ids) - {device.device_id for device in devices}
     if missing:
         raise HTTPException(
             status_code=404,
-            detail=f"Device(s) not found: {', '.join(str(u) for u in sorted(missing))}",
+            detail=f"Device(s) not found: {', '.join(sorted(missing))}",
         )
     crud.delete_devices(session=session, db_devices=devices)
     return Message(message=f"{len(devices)} device(s) deleted successfully")

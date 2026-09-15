@@ -23,8 +23,6 @@ const emit = defineEmits<{
         <dd>{{ device.device_id }}</dd>
         <dt>Type d'appareil</dt>
         <dd>{{ device.device_type }}</dd>
-        <dt>UUID</dt>
-        <dd>{{ device.uuid }}</dd>
         <dt>Actif</dt>
         <dd>{{ device.active ? "ON" : "OFF" }}</dd>
         <dt>Maître</dt>

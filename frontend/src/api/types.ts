@@ -64,7 +64,6 @@ export interface CalendarUpdate {
 }
 
 export interface GroupDevicePublic {
-  uuid: string;
   device_id: string;
   device_name: string;
   active: boolean;
@@ -93,7 +92,6 @@ export interface GroupUpdate {
 export type DeviceType = "lumestrio" | "relaystrio";
 
 export interface DevicePublic {
-  uuid: string;
   device_id: string;
   device_name: string;
   device_type: DeviceType;
@@ -111,9 +109,11 @@ export interface DevicePublic {
 }
 
 export interface DeviceCreate {
-  device_id: string;
-  device_name: string;
+  // device_id is derived server-side from device_type + device_number
+  // (e.g. "lumestrio3"), never supplied directly.
   device_type: DeviceType;
+  device_number: number;
+  device_name: string;
   active?: boolean;
   is_master?: boolean;
   handles_audio?: boolean;
@@ -125,7 +125,7 @@ export interface DeviceCreate {
 }
 
 export interface DeviceUpdate {
-  device_id?: string;
+  // device_id is immutable after creation, so it's never part of an update.
   device_name?: string;
   device_type?: DeviceType;
   active?: boolean;
@@ -141,4 +141,9 @@ export interface DeviceUpdate {
 export interface Paginated<T> {
   data: T[];
   count: number;
+}
+
+export interface FreeDeviceNumbers {
+  relaystrio: number[];
+  lumestrio: number[];
 }

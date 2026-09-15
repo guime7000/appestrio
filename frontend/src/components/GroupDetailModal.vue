@@ -20,8 +20,6 @@ const emit = defineEmits<{
       </button>
       <h2>{{ group.label }}</h2>
       <dl class="detail-list">
-        <dt>UUID</dt>
-        <dd>{{ group.uuid }}</dd>
         <dt>Calendrier</dt>
         <dd>
           <a
@@ -38,7 +36,7 @@ const emit = defineEmits<{
         <dd>
           <span v-if="group.devices.length === 0">—</span>
           <ul v-else class="device-list">
-            <li v-for="device in group.devices" :key="device.uuid">
+            <li v-for="device in group.devices" :key="device.device_id">
               {{ device.device_name }}
             </li>
           </ul>

@@ -34,7 +34,7 @@ class GroupUpdate(SQLModel):
 
 
 class GroupDevicePublic(SQLModel):
-    uuid: UUID
+    # No `uuid`: device UUIDs are internal only, see DevicePublic.
     device_id: str
     device_name: str
     active: bool
@@ -55,4 +55,4 @@ class GroupsPublic(SQLModel):
 
 
 class GroupDevicesUpdate(SQLModel):
-    device_uuids: list[UUID]
+    device_ids: list[str]

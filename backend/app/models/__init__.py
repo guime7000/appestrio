@@ -41,6 +41,20 @@ from app.models.ignition_presets import (
     IgnitionPresetsPublic,
     IgnitionPresetUpdate,
 )
+from app.models.lora_settings import (
+    DEFAULT_CHANNEL,
+    DEFAULT_CLOCK_INTERVAL_S,
+    DEFAULT_PING_INTERVAL_S,
+    DEFAULT_SPEED,
+    MAX_LORA_CHANNEL,
+    MIN_CLOCK_INTERVAL_S,
+    MIN_PING_INTERVAL_S,
+    NUM_AIR_DATA_RATES,
+    LoraSettings,
+    LoraSettingsBase,
+    LoraSettingsPublic,
+    LoraSettingsUpdate,
+)
 
 # Calendar.groups / Device.group reference Group through a string forward ref
 # (TYPE_CHECKING-only import in calendars.py/devices.py) to avoid a circular
@@ -88,6 +102,18 @@ __all__ = [
     "IgnitionPresetPublic",
     "IgnitionPresetsPublic",
     "IgnitionPresetUpdate",
+    "DEFAULT_CHANNEL",
+    "DEFAULT_CLOCK_INTERVAL_S",
+    "DEFAULT_PING_INTERVAL_S",
+    "DEFAULT_SPEED",
+    "MAX_LORA_CHANNEL",
+    "MIN_CLOCK_INTERVAL_S",
+    "MIN_PING_INTERVAL_S",
+    "NUM_AIR_DATA_RATES",
+    "LoraSettings",
+    "LoraSettingsBase",
+    "LoraSettingsPublic",
+    "LoraSettingsUpdate",
     "Message",
     "utcnow",
 ]

@@ -19,6 +19,8 @@ from app.models import (
     IgnitionPreset,
     IgnitionPresetCreate,
     IgnitionPresetUpdate,
+    LoraSettings,
+    LoraSettingsUpdate,
     utcnow,
 )
 from app.models.calendars import CalendarPublic
@@ -528,3 +530,30 @@ def device_to_public(device: Device) -> DevicePublic:
         master_ip=device.master_ip,
         updated_at=device.updated_at,
     )
+
+
+def get_lora_settings(*, session: Session) -> LoraSettings:
+    settings = session.get(LoraSettings, 1)
+    if settings is None:
+        # Get-or-create safety net: production DBs get this row from the
+        # migration's data seed, but a schema built straight from the
+        # models (e.g. in tests) won't have it yet -- callers should never
+        # have to special-case "the singleton doesn't exist".
+        settings = LoraSettings()
+        session.add(settings)
+        session.commit()
+        session.refresh(settings)
+    return settings
+
+
+def update_lora_settings(
+    *, session: Session, settings_in: LoraSettingsUpdate
+) -> LoraSettings:
+    settings = get_lora_settings(session=session)
+    update_data = settings_in.model_dump(exclude_unset=True)
+    settings.sqlmodel_update(update_data)
+    settings.updated_at = utcnow()
+    session.add(settings)
+    session.commit()
+    session.refresh(settings)
+    return settings

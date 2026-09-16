@@ -113,6 +113,22 @@ def mark_device_synced(*, session: Session, device: Device, version: int) -> Dev
     return device
 
 
+def record_device_seen(
+    *, session: Session, device: Device, roundtrip_ms: int | None = None
+) -> Device:
+    # For the daemon to call on every PONG received, regardless of whether
+    # that PONG also carries a version to reconcile via mark_device_synced
+    # -- liveness is tracked independently of sync state, so a device that's
+    # fully in sync still needs its last_seen refreshed to be shown as
+    # actually reachable rather than just "config not known to be stale".
+    device.last_seen = utcnow()
+    device.last_roundtrip_ms = roundtrip_ms
+    session.add(device)
+    session.commit()
+    session.refresh(device)
+    return device
+
+
 def create_calendar(*, session: Session, calendar_create: CalendarCreate) -> Calendar:
     db_calendar = Calendar(label=calendar_create.label, weekdays=calendar_create.weekdays)
     session.add(db_calendar)

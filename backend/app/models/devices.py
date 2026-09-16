@@ -85,6 +85,11 @@ class Device(DeviceBase, table=True):
     # has ever been pushed to it.
     config_version: int = Field(default=1)
     synced_version: int = Field(default=0)
+    # Liveness/reachability, written by the (not yet built) LoRa daemon from
+    # each PONG reply -- not written anywhere yet. Both null until a device
+    # has actually been pinged at least once; no UI surfacing yet either.
+    last_seen: datetime | None = Field(default=None)
+    last_roundtrip_ms: int | None = Field(default=None)
 
     # SQLAlchemy's own annotation parser (used to infer the relationship
     # target here) only understands bracketed generics (Optional[X]/List[X]),

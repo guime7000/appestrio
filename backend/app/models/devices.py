@@ -73,6 +73,18 @@ class Device(DeviceBase, table=True):
     group_id: UUID | None = Field(default=None, foreign_key="groups.uuid")
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
+    # LoRa config-sync bookkeeping (see Lora_Rewrite_Plan.md's config_version
+    # section). config_version is master's authoritative "current desired
+    # config" counter for this device, bumped by crud.py whenever anything in
+    # its resolved-config dependency chain changes (own row, group
+    # membership, group's calendar, that calendar's weekdays/presets).
+    # synced_version is the last value the LoRa daemon has confirmed the
+    # device actually applied (via PONG) -- not written anywhere yet, since
+    # the daemon doesn't exist. A device is "pending sync" whenever the two
+    # differ; a freshly created device starts pending (1 vs 0) since nothing
+    # has ever been pushed to it.
+    config_version: int = Field(default=1)
+    synced_version: int = Field(default=0)
 
     # SQLAlchemy's own annotation parser (used to infer the relationship
     # target here) only understands bracketed generics (Optional[X]/List[X]),

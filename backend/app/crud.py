@@ -38,6 +38,63 @@ class IgnitionPresetDateRangeError(Exception):
     pass
 
 
+# --- LoRa config-sync bookkeeping -------------------------------------
+#
+# bump_* helpers only add to the session; they never commit -- each one is
+# called from inside another crud function's existing single-commit
+# transaction, so a mutation and the config_version bumps it triggers always
+# land atomically together.
+
+
+def bump_device_config_version(*, session: Session, device: Device) -> None:
+    device.config_version += 1
+    session.add(device)
+
+
+def bump_config_version_for_devices(*, session: Session, devices: list[Device]) -> None:
+    for device in devices:
+        bump_device_config_version(session=session, device=device)
+
+
+def bump_config_version_for_group(*, session: Session, group: Group) -> None:
+    bump_config_version_for_devices(session=session, devices=group.devices)
+
+
+def bump_config_version_for_calendar(*, session: Session, calendar: Calendar) -> None:
+    for group in calendar.groups:
+        bump_config_version_for_group(session=session, group=group)
+
+
+def bump_config_version_for_calendar_id(*, session: Session, calendar_id: uuid.UUID) -> None:
+    calendar = session.get(Calendar, calendar_id)
+    if calendar:
+        bump_config_version_for_calendar(session=session, calendar=calendar)
+
+
+def get_devices_pending_sync(*, session: Session) -> list[Device]:
+    # The "queue" the LoRa daemon will consume: any device whose
+    # master-authoritative config_version hasn't been confirmed applied yet.
+    # Deliberately not a literal append-only log of sync jobs -- several
+    # edits landing before the daemon ever looks just move the target
+    # number, so there's nothing to deduplicate and no backlog that grows
+    # with edit count, only with genuinely-unsynced device count.
+    return list(
+        session.exec(
+            select(Device)
+            .where(Device.config_version != Device.synced_version)
+            .order_by(Device.updated_at)
+        ).all()
+    )
+
+
+def mark_device_synced(*, session: Session, device: Device, version: int) -> Device:
+    device.synced_version = version
+    session.add(device)
+    session.commit()
+    session.refresh(device)
+    return device
+
+
 def create_calendar(*, session: Session, calendar_create: CalendarCreate) -> Calendar:
     db_calendar = Calendar(label=calendar_create.label, weekdays=calendar_create.weekdays)
     session.add(db_calendar)
@@ -89,9 +146,14 @@ def update_calendar(
     # "clear it" the same way create_calendar treats an omitted list.
     if "weekdays" in update_data and update_data["weekdays"] is None:
         update_data["weekdays"] = []
+    weekdays_changed = (
+        "weekdays" in update_data and update_data["weekdays"] != db_calendar.weekdays
+    )
     db_calendar.sqlmodel_update(update_data)
     db_calendar.updated_at = utcnow()
     session.add(db_calendar)
+    if weekdays_changed:
+        bump_config_version_for_calendar(session=session, calendar=db_calendar)
     session.commit()
     session.refresh(db_calendar)
     return db_calendar
@@ -180,6 +242,9 @@ def create_ignition_preset(
     )
     db_ignition_preset = IgnitionPreset.model_validate(ignition_preset_create)
     session.add(db_ignition_preset)
+    bump_config_version_for_calendar_id(
+        session=session, calendar_id=ignition_preset_create.calendar_id
+    )
     session.commit()
     session.refresh(db_ignition_preset)
     return db_ignition_preset
@@ -222,15 +287,27 @@ def update_ignition_preset(
         stop_time=stop_time,
         exclude_uuid=db_ignition_preset.uuid,
     )
+    old_calendar_id = db_ignition_preset.calendar_id
     db_ignition_preset.sqlmodel_update(update_data)
     db_ignition_preset.updated_at = utcnow()
     session.add(db_ignition_preset)
+    # Always bump the preset's original calendar -- covers both a plain
+    # field edit (old == new calendar) and a move away from it. Bump the
+    # destination calendar too when it's actually a move.
+    bump_config_version_for_calendar_id(session=session, calendar_id=old_calendar_id)
+    if db_ignition_preset.calendar_id != old_calendar_id:
+        bump_config_version_for_calendar_id(
+            session=session, calendar_id=db_ignition_preset.calendar_id
+        )
     session.commit()
     session.refresh(db_ignition_preset)
     return db_ignition_preset
 
 
 def delete_ignition_preset(*, session: Session, db_ignition_preset: IgnitionPreset) -> None:
+    bump_config_version_for_calendar_id(
+        session=session, calendar_id=db_ignition_preset.calendar_id
+    )
     session.delete(db_ignition_preset)
     session.commit()
 
@@ -278,9 +355,14 @@ def update_group(
     *, session: Session, db_group: Group, group_in: GroupUpdate
 ) -> Group:
     update_data = group_in.model_dump(exclude_unset=True)
+    calendar_changed = (
+        "calendar_id" in update_data and update_data["calendar_id"] != db_group.calendar_id
+    )
     db_group.sqlmodel_update(update_data)
     db_group.updated_at = utcnow()
     session.add(db_group)
+    if calendar_changed:
+        bump_config_version_for_group(session=session, group=db_group)
     session.commit()
     session.refresh(db_group)
     return db_group
@@ -320,10 +402,13 @@ def set_group_devices(
     for device in list(db_group.devices):
         if device.device_id not in unique_ids:
             device.group_id = None
+            bump_device_config_version(session=session, device=device)
             session.add(device)
 
     for device in devices:
-        device.group_id = db_group.uuid
+        if device.group_id != db_group.uuid:
+            device.group_id = db_group.uuid
+            bump_device_config_version(session=session, device=device)
         session.add(device)
 
     session.commit()
@@ -381,6 +466,8 @@ def update_device(
     update_data = device_in.model_dump(exclude_unset=True)
     db_device.sqlmodel_update(update_data)
     db_device.updated_at = utcnow()
+    if update_data:
+        bump_device_config_version(session=session, device=db_device)
     session.add(db_device)
     session.commit()
     session.refresh(db_device)

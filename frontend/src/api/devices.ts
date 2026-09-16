@@ -5,6 +5,7 @@ import type {
   DeviceUpdate,
   FreeDeviceNumbers,
   Paginated,
+  PendingSyncStatus,
 } from "@/api/types";
 
 export const devicesApi = {
@@ -17,4 +18,5 @@ export const devicesApi = {
   delete: (deviceIds: string[]) =>
     api.delete<{ message: string }>("/devices/", { device_ids: deviceIds }),
   freeDeviceNumbers: () => api.get<FreeDeviceNumbers>("/devices/free_devices_id"),
+  pendingSync: () => api.get<PendingSyncStatus>("/devices/pending-sync"),
 };

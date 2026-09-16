@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from "vue";
 
 import CalendarDetailModal from "@/components/CalendarDetailModal.vue";
 import GroupDetailModal from "@/components/GroupDetailModal.vue";
+import PendingSyncBanner from "@/components/PendingSyncBanner.vue";
 import { devicesApi } from "@/api/devices";
 import { groupsApi } from "@/api/groups";
 import type {
@@ -18,6 +19,7 @@ const deviceTypes: DeviceType[] = ["lumestrio", "relaystrio"];
 const devices = ref<DevicePublic[]>([]);
 const groups = ref<GroupPublic[]>([]);
 const selectedDeviceIds = ref<Set<string>>(new Set());
+const pendingSyncCount = ref(0);
 
 const detailModalOpen = ref(false);
 const detailDevice = ref<DevicePublic | null>(null);
@@ -77,9 +79,14 @@ watch(
 );
 
 async function loadDevices() {
-  const [devicesResult, groupsResult] = await Promise.all([devicesApi.list(), groupsApi.list()]);
+  const [devicesResult, groupsResult, pendingSyncResult] = await Promise.all([
+    devicesApi.list(),
+    groupsApi.list(),
+    devicesApi.pendingSync(),
+  ]);
   devices.value = devicesResult.data;
   groups.value = groupsResult.data;
+  pendingSyncCount.value = pendingSyncResult.count;
   selectedDeviceIds.value = new Set(
     [...selectedDeviceIds.value].filter((id) => devices.value.some((d) => d.device_id === id)),
   );
@@ -247,6 +254,8 @@ onMounted(loadDevices);
 </script>
 
 <template>
+  <PendingSyncBanner :count="pendingSyncCount" />
+
   <div class="bulk-actions">
     <button type="button" @click="openCreateModal">Créer un appareil</button>
     <button class="clear-selection" :disabled="selectedDeviceIds.size === 0" @click="removeSelectedDevices">

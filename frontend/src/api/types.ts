@@ -147,3 +147,8 @@ export interface FreeDeviceNumbers {
   relaystrio: number[];
   lumestrio: number[];
 }
+
+export interface PendingSyncStatus {
+  count: number;
+  device_ids: string[];
+}

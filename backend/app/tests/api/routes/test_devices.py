@@ -61,6 +61,24 @@ def test_free_devices_id_excludes_taken_numbers(client: TestClient) -> None:
     assert 0 in content["relaystrio"]
 
 
+def test_pending_sync_lists_newly_created_devices(client: TestClient) -> None:
+    created = client.post(DEVICES_URL, json=device_payload()).json()
+
+    response = client.get(f"{DEVICES_URL}pending-sync")
+
+    assert response.status_code == 200
+    content = response.json()
+    assert content["count"] == 1
+    assert content["device_ids"] == [created["device_id"]]
+
+
+def test_pending_sync_empty_when_no_devices(client: TestClient) -> None:
+    response = client.get(f"{DEVICES_URL}pending-sync")
+
+    assert response.status_code == 200
+    assert response.json() == {"count": 0, "device_ids": []}
+
+
 def test_create_device_duplicate_device_id(client: TestClient) -> None:
     payload = device_payload(device_number=13)
     client.post(DEVICES_URL, json=payload)

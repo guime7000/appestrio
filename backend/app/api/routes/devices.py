@@ -16,6 +16,7 @@ from app.models import (
     FreeDeviceNumbers,
     Group,
     Message,
+    PendingSyncPublic,
 )
 
 router = APIRouter(prefix="/devices", tags=["devices"])
@@ -54,6 +55,12 @@ def get_free_devices_id(session: SessionDep) -> FreeDeviceNumbers:
         relaystrio=free_numbers[DeviceType.RELAYSTRIO],
         lumestrio=free_numbers[DeviceType.LUMESTRIO],
     )
+
+
+@router.get("/pending-sync", response_model=PendingSyncPublic)
+def get_pending_sync(session: SessionDep) -> PendingSyncPublic:
+    devices = crud.get_devices_pending_sync(session=session)
+    return PendingSyncPublic(count=len(devices), device_ids=[d.device_id for d in devices])
 
 
 @router.get("/{device_id}", response_model=DevicePublic)

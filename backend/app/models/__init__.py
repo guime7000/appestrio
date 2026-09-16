@@ -22,6 +22,7 @@ from app.models.devices import (
     DeviceType,
     DeviceUpdate,
     FreeDeviceNumbers,
+    PendingSyncPublic,
 )
 from app.models.groups import (
     Group,
@@ -88,6 +89,7 @@ __all__ = [
     "DeviceType",
     "DeviceUpdate",
     "FreeDeviceNumbers",
+    "PendingSyncPublic",
     "Group",
     "GroupBase",
     "GroupCreate",

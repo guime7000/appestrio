@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 
 import CalendarDetailModal from "@/components/CalendarDetailModal.vue";
 import DeviceDetailModal from "@/components/DeviceDetailModal.vue";
+import PendingSyncBanner from "@/components/PendingSyncBanner.vue";
 import { calendarsApi } from "@/api/calendars";
 import { devicesApi } from "@/api/devices";
 import { groupsApi } from "@/api/groups";
@@ -25,6 +26,7 @@ const newGroupLabel = ref("");
 const editingGroupUuid = ref<string | null>(null);
 const selectedDeviceIds = ref<Set<string>>(new Set());
 const selectedGroupUuids = ref<Set<string>>(new Set());
+const pendingSyncCount = ref(0);
 
 const detailModalOpen = ref(false);
 const detailGroup = ref<GroupPublic | null>(null);
@@ -49,10 +51,11 @@ const allSelected = computed(
 );
 
 async function loadAll() {
-  const [groupsResult, devicesResult, calendarsResult] = await Promise.all([
+  const [groupsResult, devicesResult, calendarsResult, pendingSyncResult] = await Promise.all([
     groupsApi.list(),
     devicesApi.list(),
     calendarsApi.list(),
+    devicesApi.pendingSync(),
   ]);
   groups.value = groupsResult.data;
   allDevices.value = devicesResult.data;
@@ -60,6 +63,7 @@ async function loadAll() {
   calendarLabels.value = Object.fromEntries(
     calendarsResult.data.map((c) => [c.uuid, c.label]),
   );
+  pendingSyncCount.value = pendingSyncResult.count;
   selectedGroupUuids.value = new Set(
     [...selectedGroupUuids.value].filter((uuid) => groups.value.some((g) => g.uuid === uuid)),
   );
@@ -231,6 +235,8 @@ onMounted(async () => {
 </script>
 
 <template>
+  <PendingSyncBanner :count="pendingSyncCount" />
+
   <form class="create-form" @submit.prevent="createGroup">
     <input v-model="newGroupLabel" placeholder="Nom du groupe" required />
     <button type="submit">Créer un groupe</button>

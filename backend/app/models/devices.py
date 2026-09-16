@@ -151,5 +151,10 @@ class FreeDeviceNumbers(SQLModel):
     lumestrio: list[int]
 
 
+class PendingSyncPublic(SQLModel):
+    count: int
+    device_ids: list[str]
+
+
 class DeviceBulkDeleteRequest(SQLModel):
     device_ids: list[str] = Field(min_length=1)

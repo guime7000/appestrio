@@ -88,6 +88,22 @@ def get_devices_pending_sync(*, session: Session) -> list[Device]:
 
 
 def mark_device_synced(*, session: Session, device: Device, version: int) -> Device:
+    # Contract for the (not yet built) daemon calling this -- both parts
+    # matter, and getting either wrong silently defeats the sync check:
+    #
+    # 1. `version` must come from the device's own self-reported version in
+    #    a PONG, never from "I finished sending the last chunk". Setting it
+    #    right after transmit would only prove master *sent* something, not
+    #    that the device received and applied it -- exactly the gap
+    #    config_version exists to catch.
+    # 2. Call this on *every* PONG received, not only right after a
+    #    deliberate push. A device already marked synced can still drift
+    #    later (factory reset, re-flash, corrupted storage); since the ping
+    #    heartbeat already cycles through every known device continuously,
+    #    always reconciling synced_version from live PONG data makes the
+    #    check self-healing against drift from any cause -- the same way
+    #    every PONG's activeState byte must reconcile into Device.active
+    #    (see Lora_Rewrite_Plan.md §9.7/§9's PONG-reconciliation notes).
     device.synced_version = version
     session.add(device)
     session.commit()

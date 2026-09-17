@@ -13,7 +13,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import IntEnum
 
-from .constants import BROADCAST_ADDRESS, FILE_MSG_START, MessageType
+from . import cobs
+from .constants import BROADCAST_ADDRESS, FILE_MSG_START, MAX_MSG_SIZE, MessageType
 
 _DATE_FORMAT = "%d/%m/%Y %H:%M:%S"
 
@@ -211,6 +212,111 @@ def decode_file_msg(buf: bytes) -> FileMsgStart | FileMsgChunk:
         _require(len(buf) >= 3, "FILE_MSG start frame too short")
         return FileMsgStart(num_parts=buf[2], addresses=tuple(buf[3:]))
     return FileMsgChunk(index=msg_number, data=buf[2:])
+
+
+# --- FILE_MSG start frame, `lumestrio`-only versioned variant ------------
+#
+# See Lora_Rewrite_Plan.md §9.7/§9.9: a config broadcast to a group is one
+# FILE_MSG transfer for the whole group, but each recipient can be at a
+# different individual config_version, so the start frame needs to carry
+# a version alongside each address rather than a bare address list.
+#
+# `relaystrio` firmware has no config_version concept at all and must
+# keep receiving the plain, untagged encode_file_msg_start/decode_file_msg
+# above -- this variant is never used for it. Safe because a broadcast
+# group is always single-type (§9.2), so the two shapes never need to
+# coexist in one transfer, and because both ends of a lumestrio-targeted
+# link are new code with no legacy wire-compatibility constraint, unlike
+# relaystrio's.
+#
+# Version width (2 bytes, big-endian, 0-65535) is an internal choice, not
+# a protocol lock-in like relaystrio's format is -- it can change later
+# without a compatibility concern. Truncation/wraparound is never unsafe:
+# a version mismatch (spurious or real) only ever costs one redundant
+# re-broadcast on the next cycle, never data loss.
+#
+# Real scaling limit, enforced below rather than just noted: each target
+# costs 3 bytes instead of 1 in this frame (vs. relaystrio's plain
+# shape), so a single large lumestrio group hits the hard MAX_MSG_SIZE
+# ceiling (constants.py, sourced from relaystrio.md/piLora.md) much
+# sooner than relaystrio's plain-address shape would. A frame that
+# exceeds it isn't rejected on the wire -- it's silently truncated on
+# receipt -- so encode_file_msg_start_versioned raises instead of ever
+# producing one. Splitting one start frame across multiple radio frames
+# isn't supported by this design or by legacy's; if a real group size
+# needs more than max_versioned_targets(), that's the actual fix needed,
+# not a bigger number here.
+
+_VERSION_BYTES = 2
+_VERSION_MAX = (1 << (8 * _VERSION_BYTES)) - 1
+_FILE_MSG_START_HEADER_SIZE = 3  # [FILE_MSG, FILE_MSG_START, num_parts]
+
+# Current *operational policy* (a deliberate choice with real headroom
+# below the hard ceiling), not the wire-format limit itself -- see
+# max_versioned_targets() for that. Keeping real lumestrio groups at or
+# under this size leaves margin for config_version to occasionally need
+# the full 2-byte width without ever approaching the hard cutoff.
+RECOMMENDED_MAX_LUMESTRIO_GROUP_SIZE = 15
+
+
+def max_versioned_targets() -> int:
+    """The most (address, version) targets a single versioned FILE_MSG
+    start frame can carry without exceeding MAX_MSG_SIZE once COBS-framed.
+
+    COBS adds exactly 1 byte of overhead for any message under 254 raw
+    bytes, regardless of zero-byte content (see cobs.py); the transport
+    layer adds exactly 1 more for the trailing delimiter. Both hold with
+    plenty of margin here, since real frame sizes are nowhere near 254.
+    """
+    entry_size = 1 + _VERSION_BYTES
+    cobs_and_delimiter_overhead = 2
+    budget = MAX_MSG_SIZE - cobs_and_delimiter_overhead - _FILE_MSG_START_HEADER_SIZE
+    return budget // entry_size
+
+
+@dataclass(frozen=True)
+class FileMsgStartVersioned:
+    num_parts: int
+    targets: tuple[tuple[int, int], ...]  # (address, truncated config_version)
+
+    def version_for(self, own_address: int) -> int | None:
+        for address, version in self.targets:
+            if address == own_address:
+                return version
+        return None
+
+
+def encode_file_msg_start_versioned(num_parts: int, targets: list[tuple[int, int]]) -> bytes:
+    _require(bool(targets), "versioned FILE_MSG start needs at least one target")
+    limit = max_versioned_targets()
+    _require(
+        len(targets) <= limit,
+        f"{len(targets)} targets exceed the {limit}-target hard ceiling for a single "
+        f"versioned FILE_MSG start frame (MAX_MSG_SIZE={MAX_MSG_SIZE}) -- split the group",
+    )
+    payload = bytearray([MessageType.FILE_MSG, FILE_MSG_START, num_parts])
+    for address, version in targets:
+        payload.append(address)
+        payload.extend((version & _VERSION_MAX).to_bytes(_VERSION_BYTES, "big"))
+    on_wire_size = len(cobs.encode(bytes(payload))) + 1  # +1 for the trailing delimiter
+    assert on_wire_size <= MAX_MSG_SIZE, (
+        f"internal error: computed on-wire size {on_wire_size} exceeds MAX_MSG_SIZE "
+        f"despite passing the target-count check -- max_versioned_targets() is wrong"
+    )
+    return bytes(payload)
+
+
+def decode_file_msg_start_versioned(buf: bytes) -> FileMsgStartVersioned:
+    _require(len(buf) >= 3, "FILE_MSG start frame too short")
+    _require(buf[1] == FILE_MSG_START, "not a FILE_MSG start frame")
+    rest = buf[3:]
+    entry_size = 1 + _VERSION_BYTES
+    _require(len(rest) % entry_size == 0, "versioned FILE_MSG start frame is malformed")
+    targets = tuple(
+        (rest[i], int.from_bytes(rest[i + 1 : i + entry_size], "big"))
+        for i in range(0, len(rest), entry_size)
+    )
+    return FileMsgStartVersioned(num_parts=buf[2], targets=targets)
 
 
 # --- generic dispatch for self-describing message types -----------------

@@ -144,3 +144,11 @@ One calendar can be associated to one or more groups
 - api/is_active : let master know if a requested lumestrio is active or not. **[not sure as master already knows this]** 
 
 - api/get_config_version : check if configuration stored on master is the same as the one stored on the requested lumestrio. If not, Master should send back a configuration.
+
+#TODO:
+
+- associer group et calendar à device
+- voir relation group -> calendrier ou calendrier-> groupe
+- voir relation group -> device
+- qd on crée un device depuis master, sa conf doit être envoyée au slave
+- qd on modifie une conf en local sur un slave (wifi), la conf doit être envoyée sur master pour mise à jour de la base de vérité.

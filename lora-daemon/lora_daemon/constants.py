@@ -19,6 +19,14 @@ FILE_MSG_START = 255
 # FILE_MSG data chunk size in bytes (legacy's `partSize`).
 FILE_CHUNK_SIZE = 53
 
+# Hard radio/firmware ceiling on any single over-the-air message, post-COBS
+# framing -- sourced from relaystrio.md's audit of the frozen ESP32
+# firmware (`MAX_MSG_SIZE = 59` in its own LoRa read path) and confirmed by
+# piLora.md's matching `recvfrom(59)`. Not a legacy constant we chose; a
+# physical/firmware fact anything we send has to respect, since a longer
+# frame is silently truncated on receipt rather than rejected.
+MAX_MSG_SIZE = 59
+
 MIN_DELAY_FOR_RESP_MS = 500
 MIN_DELAY_FOR_SEND_MS = 500
 MIN_PING_INTERVAL_S = 1

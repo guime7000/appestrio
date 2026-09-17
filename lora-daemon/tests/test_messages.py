@@ -2,8 +2,14 @@ from datetime import datetime
 
 import pytest
 
+from lora_daemon import cobs
 from lora_daemon import messages as m
-from lora_daemon.constants import BROADCAST_ADDRESS, FILE_MSG_START, MessageType
+from lora_daemon.constants import (
+    BROADCAST_ADDRESS,
+    FILE_MSG_START,
+    MAX_MSG_SIZE,
+    MessageType,
+)
 
 
 def test_sync_round_trip() -> None:
@@ -107,6 +113,59 @@ def test_file_msg_chunk_round_trip() -> None:
     assert isinstance(decoded, m.FileMsgChunk)
     assert decoded.index == 2
     assert decoded.data == b"hello"
+
+
+def test_file_msg_start_versioned_round_trip() -> None:
+    buf = m.encode_file_msg_start_versioned(5, [(3, 7), (40, 12)])
+    decoded = m.decode_file_msg_start_versioned(buf)
+    assert decoded.num_parts == 5
+    assert decoded.targets == ((3, 7), (40, 12))
+    assert decoded.version_for(3) == 7
+    assert decoded.version_for(40) == 12
+    assert decoded.version_for(99) is None
+
+
+def test_file_msg_start_versioned_requires_at_least_one_target() -> None:
+    with pytest.raises(m.MalformedMessageError, match="at least one target"):
+        m.encode_file_msg_start_versioned(5, [])
+
+
+def test_file_msg_start_versioned_truncates_version_to_two_bytes() -> None:
+    buf = m.encode_file_msg_start_versioned(1, [(3, 70000)])
+    decoded = m.decode_file_msg_start_versioned(buf)
+    assert decoded.version_for(3) == 70000 % 65536
+
+
+def test_file_msg_start_versioned_rejects_malformed_frame() -> None:
+    # A plain, unversioned start frame (1 byte/address) has the wrong
+    # entry width for the versioned decoder.
+    buf = m.encode_file_msg_start(5, [3, 40])
+    with pytest.raises(m.MalformedMessageError, match="malformed"):
+        m.decode_file_msg_start_versioned(buf)
+
+
+def test_max_versioned_targets_matches_hard_ceiling() -> None:
+    # Verified against constants.MAX_MSG_SIZE=59 (relaystrio.md/piLora.md):
+    # 18 targets -> 59 bytes on the wire exactly; 19 overflows.
+    assert m.max_versioned_targets() == 18
+
+
+def test_recommended_group_size_has_real_headroom_below_the_hard_ceiling() -> None:
+    assert m.RECOMMENDED_MAX_LUMESTRIO_GROUP_SIZE < m.max_versioned_targets()
+
+
+def test_encode_file_msg_start_versioned_accepts_the_max() -> None:
+    limit = m.max_versioned_targets()
+    targets = [(i % 64, 60000) for i in range(limit)]  # worst-case version width
+    buf = m.encode_file_msg_start_versioned(5, targets)
+    assert len(cobs.encode(buf)) + 1 <= MAX_MSG_SIZE
+
+
+def test_encode_file_msg_start_versioned_rejects_one_past_the_max() -> None:
+    limit = m.max_versioned_targets()
+    targets = [(i % 64, 1) for i in range(limit + 1)]
+    with pytest.raises(m.MalformedMessageError, match="exceed the .* hard ceiling"):
+        m.encode_file_msg_start_versioned(5, targets)
 
 
 def test_file_msg_chunk_index_cannot_collide_with_start_marker() -> None:

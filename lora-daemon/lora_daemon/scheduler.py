@@ -101,12 +101,14 @@ class PingScheduler:
         self._paused = False
 
         # Extension points for the orchestration work (item 2) to feed
-        # real values into once it exists (agenda-disabled state,
-        # WITH_AGENDA_MD5/WITH_MISSING_PARTS during a sync); PLAIN and
-        # not-disabled until then.
+        # real values into: agenda-disabled state, WITH_MISSING_PARTS
+        # during a config push, and a hook to observe each PONG (used to
+        # collect missing-part indices during a FILE_MSG transfer's
+        # verification phase -- see orchestration.py).
         self.agenda_disabled = False
         self.ping_type = PingType.PLAIN
         self.disable_wifi = False
+        self.on_pong: object = None  # Callable[[db.DeviceIdentity, messages.Pong], None] | None
 
     # -- external API, mirrors legacy's setPingableState -----------------
 
@@ -210,6 +212,8 @@ class PingScheduler:
             roundtrip_ms=roundtrip_ms,
         )
         db.reconcile_device_active(self._conn, identity.device_id, pong.active)
+        if self.on_pong is not None:
+            self.on_pong(identity, pong)
 
     def _identity_for_address(self, address: int) -> db.DeviceIdentity | None:
         # A linear scan over every known device per PONG -- fine at the

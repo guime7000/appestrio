@@ -29,7 +29,9 @@ async def test_run_daemon_starts_scheduler_and_stops_cleanly(db_path: str) -> No
     transport = LoopbackTransport(bus)
     stop = asyncio.Event()
 
-    task = asyncio.create_task(daemon.run_daemon(conn=conn, transport=transport, stop=stop))
+    task = asyncio.create_task(
+        daemon.run_daemon(conn=conn, transport=transport, stop=stop, control_port=0)
+    )
     await asyncio.sleep(0.05)
     assert not task.done()  # still running, blocked on stop.wait()
 
@@ -47,7 +49,9 @@ async def test_run_daemon_cancels_scheduler_task_on_stop(db_path: str) -> None:
     conn.commit()
     stop = asyncio.Event()
 
-    task = asyncio.create_task(daemon.run_daemon(conn=conn, transport=transport, stop=stop))
+    task = asyncio.create_task(
+        daemon.run_daemon(conn=conn, transport=transport, stop=stop, control_port=0)
+    )
     await asyncio.sleep(0.05)
     stop.set()
 

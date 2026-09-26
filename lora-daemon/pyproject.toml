@@ -5,6 +5,9 @@ description = "Python port of raspestrio's LoRa control layer, for appestrio"
 requires-python = ">=3.14,<4.0"
 dependencies = []
 
+[project.scripts]
+lora-daemon = "lora_daemon.daemon:run"
+
 [dependency-groups]
 dev = [
     "pytest<10.0.0,>=7.4.3",

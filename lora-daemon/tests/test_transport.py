@@ -1,5 +1,8 @@
+import os
+import socket
+
 from lora_daemon import messages as m
-from lora_daemon.transport import LoopbackBus, LoopbackTransport
+from lora_daemon.transport import LoopbackBus, LoopbackTransport, LoraSocketTransport
 
 
 def test_loopback_delivers_to_other_transports_not_sender() -> None:
@@ -49,3 +52,21 @@ def test_receive_all_drains_the_inbox() -> None:
     receiver.receive_all()
 
     assert receiver.receive_all() == []
+
+
+def test_lora_socket_transport_creates_missing_client_socket_dir(tmp_path) -> None:
+    # e32_socket_path must exist and be listening for open()'s registration
+    # datagram to succeed -- a fake stand-in for e32.service here.
+    e32_path = str(tmp_path / "e32.data")
+    fake_e32 = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    fake_e32.bind(e32_path)
+
+    client_path = str(tmp_path / "nested" / "does" / "not" / "exist" / "client.sock")
+    transport = LoraSocketTransport(client_socket_path=client_path, e32_socket_path=e32_path)
+
+    try:
+        transport.open()
+        assert os.path.exists(client_path)
+    finally:
+        transport.close()
+        fake_e32.close()

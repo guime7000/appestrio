@@ -48,6 +48,13 @@ class LoraSocketTransport:
         self._sock: socket.socket | None = None
 
     def open(self) -> None:
+        # Unlike e32_socket_path (owned by e32.service, must already
+        # exist), the client socket's directory is this daemon's own --
+        # safe and expected to create it (e.g. /run/lora-daemon/ on a
+        # fresh boot, before anything else has touched it).
+        parent = os.path.dirname(self._client_socket_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         if os.path.exists(self._client_socket_path):
             os.remove(self._client_socket_path)
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)

@@ -25,7 +25,7 @@ import json
 import logging
 import sqlite3
 
-from . import db
+from . import db, orchestration
 from .devices import address_for_device_id
 from .scheduler import PingScheduler
 
@@ -47,6 +47,7 @@ class ControlApiError(Exception):
 async def create_server(
     scheduler: PingScheduler,
     conn: sqlite3.Connection,
+    transport: object,
     *,
     host: str = DEFAULT_HOST,
     port: int = DEFAULT_PORT,
@@ -56,18 +57,19 @@ async def create_server(
     whichever port the OS actually chose.
     """
     return await asyncio.start_server(
-        lambda r, w: _handle_connection(r, w, scheduler, conn), host, port
+        lambda r, w: _handle_connection(r, w, scheduler, conn, transport), host, port
     )
 
 
 async def serve(
     scheduler: PingScheduler,
     conn: sqlite3.Connection,
+    transport: object,
     *,
     host: str = DEFAULT_HOST,
     port: int = DEFAULT_PORT,
 ) -> None:
-    server = await create_server(scheduler, conn, host=host, port=port)
+    server = await create_server(scheduler, conn, transport, host=host, port=port)
     addr = server.sockets[0].getsockname() if server.sockets else (host, port)
     logger.info("control API listening on %s", addr)
     async with server:
@@ -79,6 +81,7 @@ async def _handle_connection(
     writer: asyncio.StreamWriter,
     scheduler: PingScheduler,
     conn: sqlite3.Connection,
+    transport: object,
 ) -> None:
     status = 500
     payload: dict = {"error": "internal error"}
@@ -100,7 +103,7 @@ async def _handle_connection(
         length = int(headers.get("content-length") or 0)
         body = await reader.readexactly(length) if length else b""
 
-        status, payload = _dispatch(method, path, body, scheduler, conn)
+        status, payload = _dispatch(method, path, body, scheduler, conn, transport)
     except ControlApiError as exc:
         status, payload = exc.status, {"error": exc.message}
     except Exception:
@@ -124,7 +127,12 @@ async def _handle_connection(
 
 
 def _dispatch(
-    method: str, path: str, body: bytes, scheduler: PingScheduler, conn: sqlite3.Connection
+    method: str,
+    path: str,
+    body: bytes,
+    scheduler: PingScheduler,
+    conn: sqlite3.Connection,
+    transport: object,
 ) -> tuple[int, dict]:
     if method == "GET" and path == "/health":
         return 200, {"ok": True}
@@ -140,6 +148,8 @@ def _dispatch(
     if method == "POST" and path == "/resume":
         scheduler.resume()
         return 200, {"paused": False}
+    if method == "POST" and path == "/activate":
+        return _activate(body, scheduler, transport)
     raise ControlApiError(404, f"no route for {method} {path}")
 
 
@@ -164,3 +174,19 @@ def _ping_one(scheduler: PingScheduler, conn: sqlite3.Connection, device_id: str
         raise ControlApiError(404, f"unknown device_id {device_id!r}")
     address = address_for_device_id(identity.device_id, identity.device_type)
     scheduler.request_ping(address)
+
+
+def _activate(body: bytes, scheduler: PingScheduler, transport: object) -> tuple[int, dict]:
+    try:
+        request = json.loads(body) if body else {}
+    except json.JSONDecodeError as exc:
+        raise ControlApiError(400, f"invalid JSON body: {exc}") from exc
+    if "active" not in request:
+        raise ControlApiError(400, "missing required field 'active'")
+    addresses = request.get("addresses")
+    if addresses is not None and not isinstance(addresses, list):
+        raise ControlApiError(400, "'addresses' must be a list of ints if given")
+    orchestration.send_activate(
+        transport=transport, scheduler=scheduler, active=bool(request["active"]), addresses=addresses
+    )
+    return 200, {"active": bool(request["active"]), "addresses": addresses}

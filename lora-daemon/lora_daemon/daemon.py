@@ -17,7 +17,7 @@ import os
 import signal
 import sqlite3
 
-from . import control_api, db
+from . import control_api, db, orchestration
 from .scheduler import PingScheduler
 from .transport import DEFAULT_E32_SOCKET_PATH, LoraSocketTransport
 
@@ -47,30 +47,43 @@ async def run_daemon(
     stop: asyncio.Event | None = None,
     control_host: str = control_api.DEFAULT_HOST,
     control_port: int = control_api.DEFAULT_PORT,
+    agenda_sync_interval_s: float = orchestration.DEFAULT_AGENDA_SYNC_INTERVAL_S,
 ) -> None:
-    """The actual run loop: starts the scheduler and the control API and
-    blocks until told to stop. Decoupled from env parsing, transport
-    lifecycle (open/close), and signal handling so it's directly testable
-    -- `stop` is injectable for tests; main() below ties it to
-    SIGINT/SIGTERM in production. Both tasks share this one
-    `PingScheduler` instance -- that's the entire point of running the
-    control API in-process rather than as a separate service.
+    """The actual run loop: starts the ping scheduler, clock sync, the
+    automatic config-push loop, and the control API, then blocks until
+    told to stop. Decoupled from env parsing, transport lifecycle
+    (open/close), and signal handling so it's directly testable -- `stop`
+    is injectable for tests; main() below ties it to SIGINT/SIGTERM in
+    production. All of these share this one `PingScheduler` instance --
+    that's the entire point of running them in-process together rather
+    than as separate services.
     """
     scheduler = PingScheduler(conn=conn, transport=transport)
     if stop is None:
         stop = asyncio.Event()
 
-    ping_task = asyncio.create_task(scheduler.run_forever())
-    control_task = asyncio.create_task(
-        control_api.serve(scheduler, conn, host=control_host, port=control_port)
-    )
+    tasks = [
+        asyncio.create_task(scheduler.run_forever()),
+        asyncio.create_task(orchestration.run_clock_sync_forever(conn=conn, transport=transport)),
+        asyncio.create_task(
+            orchestration.run_agenda_sync_forever(
+                conn=conn,
+                transport=transport,
+                scheduler=scheduler,
+                interval_s=agenda_sync_interval_s,
+            )
+        ),
+        asyncio.create_task(
+            control_api.serve(scheduler, conn, transport, host=control_host, port=control_port)
+        ),
+    ]
     try:
         await stop.wait()
         logger.info("shutdown requested")
     finally:
-        for task in (ping_task, control_task):
+        for task in tasks:
             task.cancel()
-        for task in (ping_task, control_task):
+        for task in tasks:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
 

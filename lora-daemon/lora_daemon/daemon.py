@@ -17,7 +17,7 @@ import os
 import signal
 import sqlite3
 
-from . import db
+from . import control_api, db
 from .scheduler import PingScheduler
 from .transport import DEFAULT_E32_SOCKET_PATH, LoraSocketTransport
 
@@ -45,24 +45,34 @@ async def run_daemon(
     conn: sqlite3.Connection,
     transport: object,
     stop: asyncio.Event | None = None,
+    control_host: str = control_api.DEFAULT_HOST,
+    control_port: int = control_api.DEFAULT_PORT,
 ) -> None:
-    """The actual run loop: starts the scheduler and blocks until told to
-    stop. Decoupled from env parsing, transport lifecycle (open/close),
-    and signal handling so it's directly testable -- `stop` is injectable
-    for tests; main() below ties it to SIGINT/SIGTERM in production.
+    """The actual run loop: starts the scheduler and the control API and
+    blocks until told to stop. Decoupled from env parsing, transport
+    lifecycle (open/close), and signal handling so it's directly testable
+    -- `stop` is injectable for tests; main() below ties it to
+    SIGINT/SIGTERM in production. Both tasks share this one
+    `PingScheduler` instance -- that's the entire point of running the
+    control API in-process rather than as a separate service.
     """
     scheduler = PingScheduler(conn=conn, transport=transport)
     if stop is None:
         stop = asyncio.Event()
 
-    task = asyncio.create_task(scheduler.run_forever())
+    ping_task = asyncio.create_task(scheduler.run_forever())
+    control_task = asyncio.create_task(
+        control_api.serve(scheduler, conn, host=control_host, port=control_port)
+    )
     try:
         await stop.wait()
         logger.info("shutdown requested")
     finally:
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+        for task in (ping_task, control_task):
+            task.cancel()
+        for task in (ping_task, control_task):
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
 
 async def main() -> None:
@@ -71,6 +81,8 @@ async def main() -> None:
     db_path = _required_env("LORA_DB_PATH")
     client_socket_path = os.environ.get("LORA_CLIENT_SOCKET_PATH", DEFAULT_CLIENT_SOCKET_PATH)
     e32_socket_path = os.environ.get("LORA_E32_SOCKET_PATH", DEFAULT_E32_SOCKET_PATH)
+    control_host = os.environ.get("LORA_CONTROL_HOST", control_api.DEFAULT_HOST)
+    control_port = int(os.environ.get("LORA_CONTROL_PORT", control_api.DEFAULT_PORT))
 
     conn = db.connect(db_path)
     transport = LoraSocketTransport(
@@ -85,7 +97,13 @@ async def main() -> None:
         loop.add_signal_handler(sig, stop.set)
 
     try:
-        await run_daemon(conn=conn, transport=transport, stop=stop)
+        await run_daemon(
+            conn=conn,
+            transport=transport,
+            stop=stop,
+            control_host=control_host,
+            control_port=control_port,
+        )
     finally:
         transport.close()
         conn.close()

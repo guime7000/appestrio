@@ -15,5 +15,30 @@ services:
       context: .
       dockerfile: Dockerfile
 
+  lora-daemon:
+    image: '${DOCKER_IMAGE_LORA_DAEMON?Variable not set}:${TAG-latest}'
+    restart: always
+    depends_on:
+      - backend
+    env_file:
+      - .env
+    environment:
+      - LORA_DB_PATH=/app/data/appestrio.db
+      # Reachable from `backend` over the compose network as
+      # lora-daemon:8765 -- 127.0.0.1 (the code default) would only
+      # accept connections from inside this same container.
+      - LORA_CONTROL_HOST=0.0.0.0
+    volumes:
+      - app-db-data:/app/data
+      # e32.service (the host-level LoRa/UART driver, see
+      # Docs/Raspberry_Pi_Deployment.md) must already be running and have
+      # created this socket file before this container starts, or Docker
+      # will create an empty directory here instead and the daemon will
+      # fail to reach it.
+      - /run/e32.data:/run/e32.data
+    build:
+      context: ./lora-daemon
+      dockerfile: Dockerfile
+
 volumes:
   app-db-data:

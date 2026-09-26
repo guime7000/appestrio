@@ -10,3 +10,14 @@ services:
     volumes:
       - ./backend/app:/app/app
     command: ["fastapi", "run", "--reload"]
+
+  # Bind-mounts live source the same way, but there's no "--reload"
+  # equivalent for this process -- restart the container after an edit
+  # (`docker compose restart lora-daemon`). Note this container still
+  # needs a real /run/e32.data to do anything useful; off the Pi, without
+  # that socket, it starts and fails at transport.open() the same way
+  # `uv run python -m lora_daemon` does locally -- see
+  # Docs/Raspberry_Pi_Deployment.md.
+  lora-daemon:
+    volumes:
+      - ./lora-daemon/lora_daemon:/app/lora_daemon

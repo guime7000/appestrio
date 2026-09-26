@@ -48,6 +48,21 @@ CREATE TABLE ignition_presets (
     start_time TEXT NOT NULL,
     stop_time TEXT NOT NULL
 );
+
+-- Singleton row (id=1), mirroring the default row backend's own
+-- migration (ae5f47a6faf2_add_lora_settings_table.py) inserts.
+CREATE TABLE lora_settings (
+    id INTEGER PRIMARY KEY,
+    is_active INTEGER NOT NULL DEFAULT 0,
+    channel INTEGER NOT NULL DEFAULT 40,
+    speed INTEGER NOT NULL DEFAULT 3,
+    fec INTEGER NOT NULL DEFAULT 1,
+    ping_interval_s INTEGER NOT NULL DEFAULT 5,
+    clock_interval_s INTEGER NOT NULL DEFAULT 60,
+    updated_at TEXT NOT NULL DEFAULT ''
+);
+INSERT INTO lora_settings (id, is_active, ping_interval_s, clock_interval_s)
+VALUES (1, 0, 5, 60);
 """
 
 

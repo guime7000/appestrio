@@ -8,8 +8,12 @@ dependencies = []
 [dependency-groups]
 dev = [
     "pytest<10.0.0,>=7.4.3",
+    "pytest-asyncio<1.0.0,>=0.23.5",
     "ruff<1.0.0,>=0.2.2",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [build-system]
 requires = ["hatchling"]

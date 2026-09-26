@@ -1,6 +1,11 @@
 import pytest
 
-from lora_daemon.devices import LoraDeviceType, build_address, describe_address
+from lora_daemon.devices import (
+    LoraDeviceType,
+    address_for_device_id,
+    build_address,
+    describe_address,
+)
 
 
 def test_relaystrio_is_zero_lumestrio_is_one() -> None:
@@ -42,3 +47,25 @@ def test_describe_address_inverts_build_address(
 ) -> None:
     address = build_address(device_number, device_type)
     assert describe_address(address) == (device_type, device_number)
+
+
+def test_address_for_device_id_lumestrio() -> None:
+    assert address_for_device_id("lumestrio3", "lumestrio") == build_address(
+        3, LoraDeviceType.LUMESTRIO
+    )
+
+
+def test_address_for_device_id_relaystrio() -> None:
+    assert address_for_device_id("relaystrio7", "relaystrio") == build_address(
+        7, LoraDeviceType.RELAYSTRIO
+    )
+
+
+def test_address_for_device_id_rejects_prefix_mismatch() -> None:
+    with pytest.raises(ValueError, match="doesn't match device_type"):
+        address_for_device_id("relaystrio7", "lumestrio")
+
+
+def test_address_for_device_id_rejects_non_numeric_suffix() -> None:
+    with pytest.raises(ValueError, match="no numeric suffix"):
+        address_for_device_id("lumestrio-master", "lumestrio")

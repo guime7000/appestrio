@@ -179,3 +179,35 @@ def test_reconcile_device_active(db_path: str) -> None:
     assert conn.execute(
         "SELECT active FROM devices WHERE device_id = ?", ("lumestrio3",)
     ).fetchone()[0] == 0
+
+
+def test_get_lora_settings_default_row(db_path: str) -> None:
+    conn = db.connect(db_path)
+
+    settings = db.get_lora_settings(conn)
+
+    assert settings == db.LoraSettingsRow(is_active=False, ping_interval_s=5, clock_interval_s=60)
+
+
+def test_get_lora_settings_reflects_updates(db_path: str) -> None:
+    conn = db.connect(db_path)
+    conn.execute("UPDATE lora_settings SET is_active = 1, ping_interval_s = 10 WHERE id = 1")
+    conn.commit()
+
+    settings = db.get_lora_settings(conn)
+
+    assert settings.is_active is True
+    assert settings.ping_interval_s == 10
+
+
+def test_list_device_identities(db_path: str) -> None:
+    conn = db.connect(db_path)
+    _insert_device(conn, device_id="a", device_type="lumestrio")
+    _insert_device(conn, uuid="dev-uuid-2", device_id="b", device_type="relaystrio")
+
+    identities = db.list_device_identities(conn)
+
+    assert {i.device_id: i.device_type for i in identities} == {
+        "a": "lumestrio",
+        "b": "relaystrio",
+    }

@@ -227,9 +227,47 @@ def record_device_seen(
 
 def reconcile_device_active(conn: sqlite3.Connection, device_id: str, active: bool) -> None:
     """Write side for the PONG -> Device.active reconciliation design note
-    (item 9 of the backend-modifications plan) -- no caller yet, same
-    status as mark_device_synced/record_device_seen until the scheduler
-    exists to call it on every PONG.
+    (item 9 of the backend-modifications plan). Called by the PING
+    scheduler (scheduler.py) on every PONG.
     """
     with conn:
         conn.execute("UPDATE devices SET active = ? WHERE device_id = ?", (int(active), device_id))
+
+
+@dataclass(frozen=True)
+class LoraSettingsRow:
+    is_active: bool
+    ping_interval_s: int
+    clock_interval_s: int
+
+
+def get_lora_settings(conn: sqlite3.Connection) -> LoraSettingsRow:
+    """Reads the daemon's own singleton config row (backend's
+    `lora_settings` table, id=1 always -- created with defaults by its
+    migration, see app/models/lora_settings.py).
+    """
+    row = conn.execute(
+        "SELECT is_active, ping_interval_s, clock_interval_s FROM lora_settings WHERE id = 1"
+    ).fetchone()
+    if row is None:
+        raise SchemaMismatchError("lora_settings singleton row (id=1) is missing")
+    return LoraSettingsRow(
+        is_active=bool(row["is_active"]),
+        ping_interval_s=row["ping_interval_s"],
+        clock_interval_s=row["clock_interval_s"],
+    )
+
+
+@dataclass(frozen=True)
+class DeviceIdentity:
+    device_id: str
+    device_type: str
+
+
+def list_device_identities(conn: sqlite3.Connection) -> list[DeviceIdentity]:
+    """Every known device's (device_id, device_type) -- enough for
+    devices.address_for_device_id to derive its LoRa address, without
+    pulling the full config-payload join resolve_device_config does.
+    """
+    rows = conn.execute("SELECT device_id, device_type FROM devices").fetchall()
+    return [DeviceIdentity(device_id=r["device_id"], device_type=r["device_type"]) for r in rows]

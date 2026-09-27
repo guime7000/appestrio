@@ -55,6 +55,51 @@ async def _cancel(task: asyncio.Task) -> None:
         await task
 
 
+# --- run_hex_conf_sync_forever --------------------------------------------
+
+
+async def test_run_hex_conf_sync_forever_pushes_immediately_on_startup(db_path: str) -> None:
+    conn = db.connect(db_path)  # default row: channel=40, speed=3, fec=1 -> DEFAULT_HEX_CONF
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+
+    task = asyncio.create_task(
+        orchestration.run_hex_conf_sync_forever(conn=conn, transport=transport, interval_s=10)
+    )
+    await asyncio.sleep(0.05)
+    await _cancel(task)
+
+    assert transport.last_hex_conf == "C200001B2844"
+
+
+async def test_run_hex_conf_sync_forever_repushes_only_on_change(db_path: str) -> None:
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+
+    task = asyncio.create_task(
+        orchestration.run_hex_conf_sync_forever(conn=conn, transport=transport, interval_s=0.02)
+    )
+    await asyncio.sleep(0.05)
+    assert transport.last_hex_conf == "C200001B2844"
+
+    transport.last_hex_conf = None  # prove the next tick doesn't just re-push unconditionally
+    await asyncio.sleep(0.05)
+    await _cancel(task)
+
+    assert transport.last_hex_conf is None  # unchanged settings -> no re-push
+
+    conn.execute("UPDATE lora_settings SET channel = 12 WHERE id = 1")
+    conn.commit()
+    task = asyncio.create_task(
+        orchestration.run_hex_conf_sync_forever(conn=conn, transport=transport, interval_s=10)
+    )
+    await asyncio.sleep(0.05)
+    await _cancel(task)
+
+    assert transport.last_hex_conf != "C200001B2844"  # changed channel -> pushed a new value
+
+
 # --- send_activate ----------------------------------------------------------
 
 

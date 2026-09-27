@@ -17,6 +17,7 @@ import socket
 from . import cobs
 
 DEFAULT_E32_SOCKET_PATH = "/run/e32.data"
+DEFAULT_E32_CONTROL_SOCKET_PATH = "/run/e32.control"
 
 
 def _split_and_decode(data: bytes) -> list[bytes]:
@@ -41,10 +42,15 @@ class LoraSocketTransport:
     """Real transport: a Unix datagram socket talking to e32.service."""
 
     def __init__(
-        self, *, client_socket_path: str, e32_socket_path: str = DEFAULT_E32_SOCKET_PATH
+        self,
+        *,
+        client_socket_path: str,
+        e32_socket_path: str = DEFAULT_E32_SOCKET_PATH,
+        e32_control_socket_path: str = DEFAULT_E32_CONTROL_SOCKET_PATH,
     ) -> None:
         self._client_socket_path = client_socket_path
         self._e32_socket_path = e32_socket_path
+        self._e32_control_socket_path = e32_control_socket_path
         self._sock: socket.socket | None = None
 
     def open(self) -> None:
@@ -92,6 +98,19 @@ class LoraSocketTransport:
             raise RuntimeError("transport not open")
         return self._sock.fileno()
 
+    def set_hex_conf(self, hex_str: str) -> None:
+        """Pushes a new radio configuration to e32.service -- ported from
+        legacy's `setHexConf`. Deliberately **not** COBS-framed and no
+        trailing delimiter: that framing is a convention of the
+        message-carrying `e32_socket_path` channel only, not of this
+        separate config channel, same as legacy sending the raw hex bytes
+        straight to `/run/e32.control` on the same already-registered
+        client socket.
+        """
+        if self._sock is None:
+            raise RuntimeError("transport not open")
+        self._sock.sendto(bytes.fromhex(hex_str), self._e32_control_socket_path)
+
 
 class LoopbackBus:
     """Shared in-memory 'radio' for tests/dev: a message sent by any
@@ -118,6 +137,7 @@ class LoopbackTransport:
     def __init__(self, bus: LoopbackBus) -> None:
         self._bus = bus
         self._inbox: list[bytes] = []
+        self.last_hex_conf: str | None = None
         bus.register(self)
 
     def send(self, buf: bytes) -> None:
@@ -130,3 +150,11 @@ class LoopbackTransport:
             messages.extend(_split_and_decode(framed))
         self._inbox = []
         return messages
+
+    def set_hex_conf(self, hex_str: str) -> None:
+        # Not a message -- this is local radio-module config, not
+        # something other simulated nodes would ever see, so it doesn't
+        # go through the bus (that would also break _split_and_decode,
+        # since this isn't COBS-framed/delimited). Just recorded for
+        # tests to assert against.
+        self.last_hex_conf = hex_str

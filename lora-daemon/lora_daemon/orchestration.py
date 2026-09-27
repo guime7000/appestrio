@@ -36,13 +36,22 @@ Scope, and one real divergence from legacy worth flagging:
   instead, using the already-built `PingScheduler.pause()`/`resume()`
   channel-priority mechanism (§9.10's follow-up) rather than replicating
   that timing math.
+
+Also here (added 2026-09-28, found while prepping for real hardware
+testing): **`run_hex_conf_sync_forever`**, closing a gap where
+`hexconf.py` (built in the initial protocol/transport port, §9.8) could
+always compute the E32 module's correct radio configuration but nothing
+ever actually pushed it to `/run/e32.control`. Without this, the module's
+real channel/speed/FEC depended entirely on however it was last manually
+configured -- silently invalidating any test if it didn't happen to match
+`LoraSettings`.
 """
 
 import asyncio
 import logging
 from datetime import datetime
 
-from . import config_payload, db, messages
+from . import config_payload, db, hexconf, messages
 from .constants import FILE_CHUNK_SIZE, MIN_CLOCK_INTERVAL_S
 from .devices import address_for_device_id
 from .messages import PingType
@@ -55,6 +64,46 @@ DEFAULT_CHUNK_DELAY_S = 1.0
 DEFAULT_MISSING_CHECK_INTERVAL_S = 6.0
 DEFAULT_MISSING_REPLY_TIMEOUT_S = 2.0
 DEFAULT_MAX_MISSING_CHECKS = 5
+DEFAULT_HEX_CONF_CHECK_INTERVAL_S = 5.0
+
+
+# --- radio (hex) config sync -------------------------------------------
+
+
+async def run_hex_conf_sync_forever(
+    *,
+    conn: object,
+    transport: object,
+    interval_s: float = DEFAULT_HEX_CONF_CHECK_INTERVAL_S,
+) -> None:
+    """Keeps the E32 module's actual radio config in sync with
+    LoraSettings -- ported from legacy's `parseConf` calling `setHexConf`
+    whenever the config became active (LoraModule.ts). Pushes once
+    immediately on daemon startup (so a fresh start always configures the
+    radio, not just on the next settings *change*), then again only when
+    channel/speed/fec actually change -- avoids spamming `e32.control`
+    every tick for no reason. Runs regardless of `is_active`: the radio's
+    own config isn't gated on whether the daemon is pinging, matching
+    legacy pushing it as soon as the config loaded, independent of the
+    ping/clock-sync loops' own active checks.
+    """
+    last_pushed: str | None = None
+    while True:
+        settings = db.get_lora_settings(conn)
+        hex_conf = hexconf.build_hex_conf(
+            channel=settings.channel, speed=settings.speed, fec=settings.fec
+        )
+        if hex_conf != last_pushed:
+            transport.set_hex_conf(hex_conf)
+            logger.info(
+                "pushed hex conf %s (channel=%s speed=%s fec=%s)",
+                hex_conf,
+                settings.channel,
+                settings.speed,
+                settings.fec,
+            )
+            last_pushed = hex_conf
+        await asyncio.sleep(interval_s)
 
 
 # --- ACTIVATE -------------------------------------------------------------

@@ -20,6 +20,14 @@ services:
     restart: always
     depends_on:
       - backend
+    ports:
+      # Exposes the control API's hardware test console
+      # (http://<host>:8765/) to the LAN, not just other containers --
+      # convenient for real-hardware bring-up testing. There's no auth on
+      # these routes (they can pause the ping loop, trigger ACTIVATE,
+      # etc.), so this is acceptable on a trusted local network during
+      # bring-up but worth revisiting before any less-trusted deployment.
+      - "8765:8765"
     env_file:
       - .env
     environment:

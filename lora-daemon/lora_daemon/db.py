@@ -278,3 +278,37 @@ def list_device_identities(conn: sqlite3.Connection) -> list[DeviceIdentity]:
     """
     rows = conn.execute("SELECT device_id, device_type FROM devices").fetchall()
     return [DeviceIdentity(device_id=r["device_id"], device_type=r["device_type"]) for r in rows]
+
+
+@dataclass(frozen=True)
+class DeviceStatusRow:
+    device_id: str
+    device_type: str
+    active: bool
+    config_version: int
+    synced_version: int
+    last_seen: str | None
+    last_roundtrip_ms: int | None
+
+
+def list_devices_status(conn: sqlite3.Connection) -> list[DeviceStatusRow]:
+    """Every known device's liveness/sync bookkeeping -- for the hardware
+    test console (control_api.py) to render a device table without
+    needing the full config-payload join `resolve_device_config` does.
+    """
+    rows = conn.execute(
+        "SELECT device_id, device_type, active, config_version, synced_version, "
+        "last_seen, last_roundtrip_ms FROM devices"
+    ).fetchall()
+    return [
+        DeviceStatusRow(
+            device_id=r["device_id"],
+            device_type=r["device_type"],
+            active=bool(r["active"]),
+            config_version=r["config_version"],
+            synced_version=r["synced_version"],
+            last_seen=r["last_seen"],
+            last_roundtrip_ms=r["last_roundtrip_ms"],
+        )
+        for r in rows
+    ]

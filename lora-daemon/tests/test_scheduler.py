@@ -129,6 +129,29 @@ def test_poll_incoming_ignores_pong_from_unpinged_address(db_path: str) -> None:
     assert row["last_seen"] is None
 
 
+def test_poll_incoming_records_last_pongs_even_without_a_db_row(db_path: str) -> None:
+    # No _insert_device call here -- this is the raw-address hardware
+    # testing case (the test console's "ping address" button), where the
+    # daemon knows nothing about who it's pinging yet.
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    device = LoopbackTransport(bus)
+    scheduler = sched_mod.PingScheduler(conn=conn, transport=transport)
+    scheduler.request_ping(LUMESTRIO_3_ADDRESS)
+
+    scheduler.send_one_ping_round(ping_interval_s=5)
+    device.receive_all()
+    device.send(encode_pong(address=LUMESTRIO_3_ADDRESS, active=True))
+
+    scheduler.poll_incoming()
+
+    info = scheduler.last_pongs[LUMESTRIO_3_ADDRESS]
+    assert info.active is True
+    assert info.roundtrip_ms >= 0
+    assert info.seen_at_iso
+
+
 def test_pause_and_resume_toggle_paused_state(db_path: str) -> None:
     conn = db.connect(db_path)
     bus = LoopbackBus()

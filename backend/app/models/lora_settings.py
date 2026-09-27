@@ -11,10 +11,21 @@ NUM_AIR_DATA_RATES = 6
 MIN_PING_INTERVAL_S = 1
 MIN_CLOCK_INTERVAL_S = 1
 
-# Legacy defaults (LoraState.ts's DefaultLoraState), preserved so a fresh
-# install behaves the same as the Node daemon did out of the box.
-DEFAULT_CHANNEL = 40
-DEFAULT_SPEED = 3
+# channel/speed match `relaystrio`'s E32 module, which is hardcoded in
+# firmware to channel=0, air rate AIR_DATA_RATE_010_24 (speed index 2,
+# 2.4kbps) and can never be reconfigured remotely (Legacy/Audits/
+# relaystrio.md). Every device on one physical LoRa network must share
+# the same channel/air-rate to hear each other at all -- it's the
+# radio's own tuning, not a per-device setting -- so any site with a
+# relaystrio unit present needs the whole network (master + every
+# lumestrio) on these values; shipping them as the default means a
+# freshly provisioned lumestrio needs no manual PATCH to join such a
+# network. Not legacy's own software default (LoraState.ts's
+# DefaultLoraState used channel=40/speed=3) -- see the migration that
+# changed this (81b1c47cc2a5) and Lora_Rewrite_Plan.md for the history.
+# ping/clock interval defaults are still legacy's own, unrelated to this.
+DEFAULT_CHANNEL = 0
+DEFAULT_SPEED = 2
 DEFAULT_PING_INTERVAL_S = 5
 DEFAULT_CLOCK_INTERVAL_S = 60
 

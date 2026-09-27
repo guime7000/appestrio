@@ -84,6 +84,34 @@ async def _request(host: str, port: int, method: str, path: str, body: bytes = b
     return status, payload
 
 
+async def _request_raw(host: str, port: int, method: str, path: str):
+    """Like _request, but returns (status, content_type, raw_bytes)
+    without assuming a JSON body -- for routes like GET / that serve
+    HTML.
+    """
+    reader, writer = await asyncio.open_connection(host, port)
+    request = f"{method} {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n".encode("latin-1")
+    writer.write(request)
+    await writer.drain()
+
+    status_line = await reader.readline()
+    status = int(status_line.decode("latin-1").split(" ")[1])
+
+    headers = {}
+    while True:
+        line = await reader.readline()
+        if line in (b"\r\n", b"\n", b""):
+            break
+        name, _, value = line.decode("latin-1").partition(":")
+        headers[name.strip().lower()] = value.strip()
+
+    length = int(headers.get("content-length") or 0)
+    raw_body = await reader.readexactly(length) if length else b""
+    writer.close()
+    await writer.wait_closed()
+    return status, headers.get("content-type", ""), raw_body
+
+
 async def test_health(db_path: str) -> None:
     conn = db.connect(db_path)
     bus = LoopbackBus()
@@ -232,5 +260,118 @@ async def test_unknown_route_returns_404(db_path: str) -> None:
     try:
         status, _payload = await _request(host, port, "GET", "/nope")
         assert status == 404
+    finally:
+        await _stop(server, serve_task)
+
+
+async def test_root_serves_the_test_console_html(db_path: str) -> None:
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+    server, serve_task, host, port = await _start(scheduler, conn, transport)
+    try:
+        status, content_type, body = await _request_raw(host, port, "GET", "/")
+        assert status == 200
+        assert content_type.startswith("text/html")
+        assert b"lora-daemon test console" in body
+    finally:
+        await _stop(server, serve_task)
+
+
+async def test_ping_address_marks_pingable_without_a_db_row(db_path: str) -> None:
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+    server, serve_task, host, port = await _start(scheduler, conn, transport)
+    try:
+        status, payload = await _request(
+            host, port, "POST", "/ping-address", json.dumps({"address": 42}).encode()
+        )
+        assert status == 200
+        assert payload == {"pinged_address": 42}
+        assert scheduler.pingable.keys() == [42]
+    finally:
+        await _stop(server, serve_task)
+
+
+async def test_ping_address_rejects_non_int(db_path: str) -> None:
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+    server, serve_task, host, port = await _start(scheduler, conn, transport)
+    try:
+        status, payload = await _request(
+            host, port, "POST", "/ping-address", json.dumps({"address": "abc"}).encode()
+        )
+        assert status == 400
+        assert "int" in payload["error"]
+    finally:
+        await _stop(server, serve_task)
+
+
+async def test_status_reports_paused_pingable_and_last_pongs(db_path: str) -> None:
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    device = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+    scheduler.request_ping(LUMESTRIO_3_ADDRESS)
+    scheduler.send_one_ping_round(ping_interval_s=5)
+    device.receive_all()
+    device.send(messages.encode_pong(address=LUMESTRIO_3_ADDRESS, active=True))
+    scheduler.poll_incoming()
+
+    server, serve_task, host, port = await _start(scheduler, conn, transport)
+    try:
+        status, payload = await _request(host, port, "GET", "/status")
+        assert status == 200
+        assert payload["paused"] is False
+        assert payload["pingable"] == [LUMESTRIO_3_ADDRESS]
+        pong = payload["last_pongs"][str(LUMESTRIO_3_ADDRESS)]
+        assert pong["active"] is True
+        assert pong["roundtrip_ms"] >= 0
+    finally:
+        await _stop(server, serve_task)
+
+
+async def test_devices_lists_db_status(db_path: str) -> None:
+    conn = db.connect(db_path)
+    _insert_device(conn, config_version=3, synced_version=1)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+    server, serve_task, host, port = await _start(scheduler, conn, transport)
+    try:
+        status, payload = await _request(host, port, "GET", "/devices")
+        assert status == 200
+        [device] = payload["devices"]
+        assert device["device_id"] == "lumestrio3"
+        assert device["config_version"] == 3
+        assert device["synced_version"] == 1
+    finally:
+        await _stop(server, serve_task)
+
+
+async def test_sync_config_starts_background_task_and_reports_status(db_path: str) -> None:
+    conn = db.connect(db_path)
+    _insert_device(conn, config_version=1, synced_version=0)
+    conn.execute("UPDATE lora_settings SET is_active = 1 WHERE id = 1")
+    conn.commit()
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+    server, serve_task, host, port = await _start(scheduler, conn, transport)
+    try:
+        status, payload = await _request(
+            host, port, "POST", "/devices/lumestrio3/sync-config"
+        )
+        assert status == 202
+        assert payload == {"started": True, "device_id": "lumestrio3"}
+
+        status, payload = await _request(host, port, "GET", "/status")
+        assert payload["sync_status"]["lumestrio3"]["state"] in ("running", "done", "error")
     finally:
         await _stop(server, serve_task)

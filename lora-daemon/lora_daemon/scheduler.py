@@ -78,6 +78,22 @@ class _PingedSlot:
     fire_at: float  # time.monotonic() this slot's response window opens
 
 
+@dataclass(frozen=True)
+class PongInfo:
+    """The last PONG seen from a given address, recorded regardless of
+    whether that address has a matching `devices` row -- so ad hoc
+    hardware testing (e.g. the test console's raw-address ping) has
+    something to show even for an address nothing in the DB knows about.
+    """
+
+    address: int
+    active: bool
+    agenda_md5: str | None
+    missing_parts: tuple[int, ...] | None
+    roundtrip_ms: int
+    seen_at_iso: str
+
+
 class PingScheduler:
     """One instance per running daemon process. Owns the pingable set,
     the round-robin index across ticks, and the outstanding-slots state
@@ -99,6 +115,7 @@ class PingScheduler:
         self._last_ping_type = PingType.PLAIN
         self._wake = asyncio.Event()
         self._paused = False
+        self.last_pongs: dict[int, PongInfo] = {}
 
         # Extension points for the orchestration work (item 2) to feed
         # real values into: agenda-disabled state, WITH_MISSING_PARTS
@@ -200,11 +217,22 @@ class PingScheduler:
         if slot is None:
             logger.warning("PONG from unpinged/unknown address %s", pong.address)
             return
+        roundtrip_ms = int((time.monotonic() - slot.fire_at) * 1000)
+        # Recorded unconditionally, before any DB lookup -- ad hoc hardware
+        # testing (e.g. the test console's raw-address ping) has no DB row
+        # to write to, but should still see that a real reply arrived.
+        self.last_pongs[pong.address] = PongInfo(
+            address=pong.address,
+            active=pong.active,
+            agenda_md5=pong.agenda_md5,
+            missing_parts=pong.missing_parts,
+            roundtrip_ms=roundtrip_ms,
+            seen_at_iso=_now_iso(),
+        )
         identity = self._identity_for_address(pong.address)
         if identity is None:
             logger.error("PONG from address %s has no matching device row", pong.address)
             return
-        roundtrip_ms = int((time.monotonic() - slot.fire_at) * 1000)
         db.record_device_seen(
             self._conn,
             identity.device_id,

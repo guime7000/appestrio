@@ -3,7 +3,7 @@ import contextlib
 
 import pytest
 
-from lora_daemon import db, orchestration
+from lora_daemon import db, hexconf, orchestration
 from lora_daemon.devices import LoraDeviceType, build_address
 from lora_daemon.messages import (
     FILE_MSG_START,
@@ -59,9 +59,12 @@ async def _cancel(task: asyncio.Task) -> None:
 
 
 async def test_run_hex_conf_sync_forever_pushes_immediately_on_startup(db_path: str) -> None:
-    conn = db.connect(db_path)  # default row: channel=40, speed=3, fec=1 -> DEFAULT_HEX_CONF
+    # default row: channel=0/speed=2 (matches relaystrio's fixed radio --
+    # see app/models/lora_settings.py's comment, backend), fec=1.
+    conn = db.connect(db_path)
     bus = LoopbackBus()
     transport = LoopbackTransport(bus)
+    expected = hexconf.build_hex_conf(channel=0, speed=2, fec=True)
 
     task = asyncio.create_task(
         orchestration.run_hex_conf_sync_forever(conn=conn, transport=transport, interval_s=10)
@@ -69,19 +72,20 @@ async def test_run_hex_conf_sync_forever_pushes_immediately_on_startup(db_path: 
     await asyncio.sleep(0.05)
     await _cancel(task)
 
-    assert transport.last_hex_conf == "C200001B2844"
+    assert transport.last_hex_conf == expected
 
 
 async def test_run_hex_conf_sync_forever_repushes_only_on_change(db_path: str) -> None:
     conn = db.connect(db_path)
     bus = LoopbackBus()
     transport = LoopbackTransport(bus)
+    default_conf = hexconf.build_hex_conf(channel=0, speed=2, fec=True)
 
     task = asyncio.create_task(
         orchestration.run_hex_conf_sync_forever(conn=conn, transport=transport, interval_s=0.02)
     )
     await asyncio.sleep(0.05)
-    assert transport.last_hex_conf == "C200001B2844"
+    assert transport.last_hex_conf == default_conf
 
     transport.last_hex_conf = None  # prove the next tick doesn't just re-push unconditionally
     await asyncio.sleep(0.05)
@@ -97,7 +101,7 @@ async def test_run_hex_conf_sync_forever_repushes_only_on_change(db_path: str) -
     await asyncio.sleep(0.05)
     await _cancel(task)
 
-    assert transport.last_hex_conf != "C200001B2844"  # changed channel -> pushed a new value
+    assert transport.last_hex_conf != default_conf  # changed channel -> pushed a new value
 
 
 # --- send_activate ----------------------------------------------------------

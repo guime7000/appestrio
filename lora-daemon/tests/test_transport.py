@@ -70,3 +70,42 @@ def test_lora_socket_transport_creates_missing_client_socket_dir(tmp_path) -> No
     finally:
         transport.close()
         fake_e32.close()
+
+
+def test_lora_socket_transport_set_hex_conf_sends_raw_unframed_bytes(tmp_path) -> None:
+    e32_path = str(tmp_path / "e32.data")
+    fake_e32 = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    fake_e32.bind(e32_path)
+
+    control_path = str(tmp_path / "e32.control")
+    fake_control = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    fake_control.bind(control_path)
+    fake_control.settimeout(1.0)
+
+    client_path = str(tmp_path / "client.sock")
+    transport = LoraSocketTransport(
+        client_socket_path=client_path, e32_socket_path=e32_path, e32_control_socket_path=control_path
+    )
+
+    try:
+        transport.open()
+        transport.set_hex_conf("C200001B2844")
+        received = fake_control.recv(4096)
+        # Raw bytes, no COBS framing and no trailing delimiter -- unlike
+        # send()'s message frames, this is a separate config channel.
+        assert received == bytes.fromhex("C200001B2844")
+    finally:
+        transport.close()
+        fake_e32.close()
+        fake_control.close()
+
+
+def test_loopback_set_hex_conf_records_without_broadcasting() -> None:
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    listener = LoopbackTransport(bus)
+
+    transport.set_hex_conf("C200001B2844")
+
+    assert transport.last_hex_conf == "C200001B2844"
+    assert listener.receive_all() == []  # not a message, doesn't reach other nodes

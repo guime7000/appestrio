@@ -239,6 +239,9 @@ class LoraSettingsRow:
     is_active: bool
     ping_interval_s: int
     clock_interval_s: int
+    channel: int
+    speed: int
+    fec: bool
 
 
 def get_lora_settings(conn: sqlite3.Connection) -> LoraSettingsRow:
@@ -247,7 +250,8 @@ def get_lora_settings(conn: sqlite3.Connection) -> LoraSettingsRow:
     migration, see app/models/lora_settings.py).
     """
     row = conn.execute(
-        "SELECT is_active, ping_interval_s, clock_interval_s FROM lora_settings WHERE id = 1"
+        "SELECT is_active, ping_interval_s, clock_interval_s, channel, speed, fec "
+        "FROM lora_settings WHERE id = 1"
     ).fetchone()
     if row is None:
         raise SchemaMismatchError("lora_settings singleton row (id=1) is missing")
@@ -255,6 +259,9 @@ def get_lora_settings(conn: sqlite3.Connection) -> LoraSettingsRow:
         is_active=bool(row["is_active"]),
         ping_interval_s=row["ping_interval_s"],
         clock_interval_s=row["clock_interval_s"],
+        channel=row["channel"],
+        speed=row["speed"],
+        fec=bool(row["fec"]),
     )
 
 

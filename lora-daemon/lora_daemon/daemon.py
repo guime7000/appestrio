@@ -64,6 +64,7 @@ async def run_daemon(
 
     tasks = [
         asyncio.create_task(scheduler.run_forever()),
+        asyncio.create_task(orchestration.run_hex_conf_sync_forever(conn=conn, transport=transport)),
         asyncio.create_task(orchestration.run_clock_sync_forever(conn=conn, transport=transport)),
         asyncio.create_task(
             orchestration.run_agenda_sync_forever(

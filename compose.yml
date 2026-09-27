@@ -28,8 +28,6 @@ services:
       # etc.), so this is acceptable on a trusted local network during
       # bring-up but worth revisiting before any less-trusted deployment.
       - "8765:8765"
-    env_file:
-      - .env
     environment:
       - LORA_DB_PATH=/app/data/appestrio.db
       # Reachable from `backend` over the compose network as

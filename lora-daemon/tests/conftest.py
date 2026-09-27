@@ -50,12 +50,15 @@ CREATE TABLE ignition_presets (
 );
 
 -- Singleton row (id=1), mirroring the default row backend's own
--- migration (ae5f47a6faf2_add_lora_settings_table.py) inserts.
+-- migrations produce (ae5f47a6faf2_add_lora_settings_table.py, updated
+-- by 81b1c47cc2a5 to match relaystrio's fixed-in-firmware channel/speed
+-- rather than legacy's own software default -- see
+-- app/models/lora_settings.py's comment).
 CREATE TABLE lora_settings (
     id INTEGER PRIMARY KEY,
     is_active INTEGER NOT NULL DEFAULT 0,
-    channel INTEGER NOT NULL DEFAULT 40,
-    speed INTEGER NOT NULL DEFAULT 3,
+    channel INTEGER NOT NULL DEFAULT 0,
+    speed INTEGER NOT NULL DEFAULT 2,
     fec INTEGER NOT NULL DEFAULT 1,
     ping_interval_s INTEGER NOT NULL DEFAULT 5,
     clock_interval_s INTEGER NOT NULL DEFAULT 60,

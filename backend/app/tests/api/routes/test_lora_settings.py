@@ -11,8 +11,10 @@ def test_get_lora_settings_defaults(client: TestClient) -> None:
     assert response.status_code == 200
     content = response.json()
     assert content["is_active"] is False
-    assert content["channel"] == 40
-    assert content["speed"] == 3
+    # channel=0/speed=2 match relaystrio's fixed-in-firmware E32 config --
+    # see app/models/lora_settings.py's comment.
+    assert content["channel"] == 0
+    assert content["speed"] == 2
     assert content["fec"] is True
     assert content["ping_interval_s"] == 5
     assert content["clock_interval_s"] == 60
@@ -27,7 +29,7 @@ def test_update_lora_settings(client: TestClient) -> None:
     assert content["channel"] == 12
     assert content["is_active"] is True
     # Untouched fields keep their value: PATCH is partial.
-    assert content["speed"] == 3
+    assert content["speed"] == 2
 
 
 def test_update_lora_settings_rejects_out_of_range_channel(client: TestClient) -> None:

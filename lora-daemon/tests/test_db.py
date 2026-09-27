@@ -186,8 +186,11 @@ def test_get_lora_settings_default_row(db_path: str) -> None:
 
     settings = db.get_lora_settings(conn)
 
+    # channel=0/speed=2 match relaystrio's fixed-in-firmware E32 config,
+    # not legacy's own software default -- see
+    # app/models/lora_settings.py's comment (backend).
     assert settings == db.LoraSettingsRow(
-        is_active=False, ping_interval_s=5, clock_interval_s=60, channel=40, speed=3, fec=True
+        is_active=False, ping_interval_s=5, clock_interval_s=60, channel=0, speed=2, fec=True
     )
 
 

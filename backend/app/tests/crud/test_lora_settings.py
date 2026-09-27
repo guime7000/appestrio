@@ -4,13 +4,18 @@ from app import crud
 from app.models import LoraSettingsUpdate
 
 
-def test_get_lora_settings_creates_singleton_with_legacy_defaults(session: Session) -> None:
+def test_get_lora_settings_creates_singleton_with_default_matching_relaystrio(
+    session: Session,
+) -> None:
     settings = crud.get_lora_settings(session=session)
 
     assert settings.id == 1
     assert settings.is_active is False
-    assert settings.channel == 40
-    assert settings.speed == 3
+    # channel=0/speed=2 match relaystrio's fixed-in-firmware E32 config,
+    # not legacy's own software default (channel=40/speed=3) -- see
+    # app/models/lora_settings.py's comment for why.
+    assert settings.channel == 0
+    assert settings.speed == 2
     assert settings.fec is True
     assert settings.ping_interval_s == 5
     assert settings.clock_interval_s == 60
@@ -35,7 +40,7 @@ def test_update_lora_settings_partial(session: Session) -> None:
     assert updated.channel == 10
     assert updated.is_active is True
     # Untouched fields keep their value: PATCH is partial.
-    assert updated.speed == 3
+    assert updated.speed == 2
     assert updated.updated_at >= original_updated_at
 
 

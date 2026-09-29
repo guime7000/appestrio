@@ -341,6 +341,18 @@ def test_create_ignition_preset_back_to_back_times_allowed(session: Session) -> 
     assert preset.start_time == "17:00"
 
 
+@pytest.mark.parametrize("bad_date", ["2026-01-01", "1/1/2026", "31/02/2026", "not-a-date"])
+def test_update_ignition_preset_rejects_bad_date_format(bad_date: str) -> None:
+    with pytest.raises(ValueError, match="date"):
+        IgnitionPresetUpdate(start_date=bad_date)
+
+
+@pytest.mark.parametrize("bad_time", ["9:15", "09:15:00", "25:00", "not-a-time"])
+def test_update_ignition_preset_rejects_bad_time_format(bad_time: str) -> None:
+    with pytest.raises(ValueError, match="time"):
+        IgnitionPresetUpdate(start_time=bad_time)
+
+
 def test_update_ignition_preset(session: Session) -> None:
     calendar = create_calendar(session)
     preset = create_ignition_preset(session, calendar_id=calendar.uuid)
@@ -353,6 +365,19 @@ def test_update_ignition_preset(session: Session) -> None:
 
     assert updated.name == "renamed"
     assert updated.start_date == preset.start_date
+
+
+def test_update_ignition_preset_start_time(session: Session) -> None:
+    calendar = create_calendar(session)
+    preset = create_ignition_preset(session, calendar_id=calendar.uuid)
+
+    updated = crud.update_ignition_preset(
+        session=session,
+        db_ignition_preset=preset,
+        ignition_preset_in=IgnitionPresetUpdate(start_time="08:00"),
+    )
+
+    assert updated.start_time == "08:00"
 
 
 def test_update_ignition_preset_rejects_start_after_stop(session: Session) -> None:

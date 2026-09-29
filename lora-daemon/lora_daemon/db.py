@@ -119,16 +119,25 @@ class CalendarRow:
 
 @dataclass(frozen=True)
 class DeviceConfigRow:
+    """Everything `sync_device_config` needs to address and build a config
+    push for one device. `device_type` stays here (orchestration.py needs
+    it to compute the LoRa address and to reject relaystrio, which has no
+    config push yet) but is deliberately excluded from the wire payload
+    itself (see config_payload.py) -- it costs no bytes if it never leaves
+    this process. `is_master` and `active` aren't here at all: `is_master`
+    is local-only/never transmitted, and `active` is state delivered
+    solely via the ACTIVATE message, not this config push. `ip`/
+    `master_ip` stay as real `devices` columns (avahi/mDNS makes them
+    redundant for reachability) but likewise aren't resolved here since
+    nothing in the config-push path needs them.
+    """
+
     device_id: str
     device_name: str
     device_type: str
-    active: bool
-    is_master: bool
     handles_audio: bool
     handles_dmx: bool
     audiofile: str | None
-    ip: str | None
-    master_ip: str | None
     config_version: int
     group_label: str | None
     calendar: CalendarRow | None
@@ -142,8 +151,8 @@ def resolve_device_config(conn: sqlite3.Connection, device_id: str) -> DeviceCon
     """
     row = conn.execute(
         """
-        SELECT d.device_id, d.device_name, d.device_type, d.active, d.is_master,
-               d.handles_audio, d.handles_dmx, d.audiofile, d.ip, d.master_ip,
+        SELECT d.device_id, d.device_name, d.device_type,
+               d.handles_audio, d.handles_dmx, d.audiofile,
                d.config_version, g.label AS group_label, g.calendar_id AS calendar_id
         FROM devices d
         LEFT JOIN groups g ON g.uuid = d.group_id
@@ -160,13 +169,9 @@ def resolve_device_config(conn: sqlite3.Connection, device_id: str) -> DeviceCon
         device_id=row["device_id"],
         device_name=row["device_name"],
         device_type=row["device_type"],
-        active=bool(row["active"]),
-        is_master=bool(row["is_master"]),
         handles_audio=bool(row["handles_audio"]),
         handles_dmx=bool(row["handles_dmx"]),
         audiofile=row["audiofile"],
-        ip=row["ip"],
-        master_ip=row["master_ip"],
         config_version=row["config_version"],
         group_label=row["group_label"],
         calendar=calendar,

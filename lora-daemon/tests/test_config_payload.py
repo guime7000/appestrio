@@ -9,13 +9,9 @@ def _row(**overrides) -> DeviceConfigRow:
         "device_id": "lumestrio3",
         "device_name": "Lumestrio 3",
         "device_type": "lumestrio",
-        "active": True,
-        "is_master": False,
         "handles_audio": True,
         "handles_dmx": False,
         "audiofile": "song.mp3",
-        "ip": "10.0.0.5",
-        "master_ip": "10.0.0.1",
         "config_version": 7,
         "group_label": "Jardin",
         "calendar": None,
@@ -69,6 +65,8 @@ def test_payload_serializes_to_json_bytes() -> None:
     assert decoded["device_name"] == "Lumestrio 3"
     assert decoded["config_version"] == 7
     assert decoded["calendar"] is None
+    for slimmed_field in ("device_type", "is_master", "active", "ip", "master_ip"):
+        assert slimmed_field not in decoded
 
 
 def test_payload_json_round_trips_nested_calendar() -> None:

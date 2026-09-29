@@ -19,6 +19,15 @@ nothing about `relaystrio` (a completely different, legacy-compatible
 doesn't expose it -- see app/models/devices.py) but a top-level field of
 this payload: it's what the receiving device stores locally and echoes
 back in PONG per the config_version design (Lora_Rewrite_Plan.md §9.7).
+
+`device_type`, `is_master`, `active`, `ip` and `master_ip` are
+deliberately absent (slimmed 2026-09-29, see the plan doc's provisioning-
+model note): every field here costs real bytes against the 59-byte
+`MAX_MSG_SIZE` ceiling, and none of those five are actually needed on the
+wire -- `device_type` is self-known by the receiving device from its own
+OS hostname, `is_master` is local-only and never transmitted, `active` is
+state delivered solely via the ACTIVATE message, and `ip`/`master_ip` are
+redundant now that every device is reachable via avahi/mDNS.
 """
 
 import json
@@ -48,14 +57,9 @@ class CalendarPayload:
 class DeviceConfigPayload:
     config_version: int
     device_name: str
-    device_type: str
-    active: bool
-    is_master: bool
     handles_audio: bool
     handles_dmx: bool
     audiofile: str | None
-    ip: str | None
-    master_ip: str | None
     group: str | None
     calendar: CalendarPayload | None
 
@@ -85,14 +89,9 @@ def build_device_config_payload(row: DeviceConfigRow) -> DeviceConfigPayload:
     return DeviceConfigPayload(
         config_version=row.config_version,
         device_name=row.device_name,
-        device_type=row.device_type,
-        active=row.active,
-        is_master=row.is_master,
         handles_audio=row.handles_audio,
         handles_dmx=row.handles_dmx,
         audiofile=row.audiofile,
-        ip=row.ip,
-        master_ip=row.master_ip,
         group=row.group_label,
         calendar=calendar,
     )

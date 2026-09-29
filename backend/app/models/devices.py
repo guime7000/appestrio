@@ -110,9 +110,10 @@ class DeviceCreate(DeviceBase):
 class DeviceUpdate(SQLModel):
     # device_id is immutable after creation: it's about to become the thing
     # the LoRa address is derived from, so a live, radio-addressed device
-    # must never be renamed out from under its assigned address.
+    # must never be renamed out from under its assigned address. device_type
+    # is likewise immutable -- it's encoded into device_id, so patching one
+    # without the other would desync them.
     device_name: str | None = Field(default=None, min_length=1, max_length=255)
-    device_type: DeviceType | None = None
     active: bool | None = None
     is_master: bool | None = None
     handles_audio: bool | None = None

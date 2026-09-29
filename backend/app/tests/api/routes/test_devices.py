@@ -176,6 +176,22 @@ def test_update_device(client: TestClient) -> None:
     assert content["device_name"] == created["device_name"]
 
 
+def test_update_device_ignores_device_type(client: TestClient) -> None:
+    """device_type is immutable -- it's encoded into device_id, so a PATCH
+    can't be allowed to desync them (see DeviceUpdate's comment).
+    """
+    created = client.post(
+        DEVICES_URL, json=device_payload(device_type="lumestrio", device_number=1)
+    ).json()
+
+    response = client.patch(
+        f"{DEVICES_URL}{created['device_id']}", json={"device_type": "relaystrio"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["device_type"] == "lumestrio"
+
+
 def test_update_device_not_found(client: TestClient) -> None:
     response = client.patch(
         f"{DEVICES_URL}nosuchdevice", json={"audiofile": "new_audio.mp3"}

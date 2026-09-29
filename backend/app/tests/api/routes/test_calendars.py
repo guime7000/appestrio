@@ -353,6 +353,22 @@ def test_update_ignition_preset_unknown_calendar(client: TestClient) -> None:
     assert response.status_code == 404
 
 
+def test_update_ignition_preset_start_after_stop_rejected(client: TestClient) -> None:
+    calendar = client.post(CALENDARS_URL, json=calendar_payload()).json()
+    created = client.post(
+        IGNITION_PRESETS_URL,
+        json=ignition_preset_payload(
+            calendar["uuid"], start_date="01/01/2026", stop_date="31/01/2026"
+        ),
+    ).json()
+
+    response = client.patch(
+        f"{IGNITION_PRESETS_URL}{created['uuid']}", json={"start_date": "15/02/2026"}
+    )
+
+    assert response.status_code == 422
+
+
 def test_update_ignition_preset_overlap_rejected(client: TestClient) -> None:
     calendar = client.post(CALENDARS_URL, json=calendar_payload()).json()
     client.post(IGNITION_PRESETS_URL, json=ignition_preset_payload(calendar["uuid"]))

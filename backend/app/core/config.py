@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     # its own local file, so a relative default is fine.
     SQLITE_PATH: str = "app.db"
 
+    # lora-daemon's control API (see appestrio/lora-daemon/lora_daemon/
+    # control_api.py) -- reachable as `lora-daemon:8765` over the compose
+    # network (see compose.yml), not localhost: `backend` and `lora-daemon`
+    # are separate containers.
+    LORA_DAEMON_URL: str = "http://lora-daemon:8765"
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:

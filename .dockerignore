@@ -1,0 +1,13 @@
+.git
+.env
+.env.*
+
+frontend/node_modules
+frontend/dist
+
+backend/.venv
+backend/__pycache__
+backend/app.db
+
+lora-daemon/.venv
+lora-daemon/__pycache__

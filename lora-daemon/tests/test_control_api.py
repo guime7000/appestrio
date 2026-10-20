@@ -237,6 +237,23 @@ async def test_activate_targeted(db_path: str) -> None:
         await _stop(server, serve_task)
 
 
+async def test_clock_sync(db_path: str) -> None:
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    listener = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+    server, serve_task, host, port = await _start(scheduler, conn, transport)
+    try:
+        status, payload = await _request(host, port, "POST", "/clock-sync")
+        assert status == 200
+        assert payload == {"sent": True}
+        [frame] = listener.receive_all()
+        assert frame[0] == int(messages.MessageType.SYNC)
+    finally:
+        await _stop(server, serve_task)
+
+
 async def test_activate_missing_field_returns_400(db_path: str) -> None:
     conn = db.connect(db_path)
     bus = LoopbackBus()

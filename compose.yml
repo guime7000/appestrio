@@ -42,6 +42,18 @@ services:
       # will create an empty directory here instead and the daemon will
       # fail to reach it.
       - /run/e32.data:/run/e32.data
+      # lora-daemon creates its OWN client socket here (transport.py's
+      # LoraSocketTransport.open(), default /run/lora-daemon/client.sock)
+      # so e32.service -- which runs on the host, not in a container --
+      # can write delivery acks/replies back to it. Without this mount
+      # that socket only exists inside this container's own /run, which
+      # the host-level e32 process can't see: e32.service's own log shows
+      # exactly this failure ("unable to send back status to unix socket
+      # /run/lora-daemon/client.sock: ENOENT") -- outbound sends (e.g.
+      # ACTIVATE) still work since /run/e32.data above is shared, but
+      # nothing can ever be delivered back (PINGs appear to go
+      # unanswered) until this directory is shared too.
+      - /run/lora-daemon:/run/lora-daemon
     build:
       context: ./lora-daemon
       dockerfile: Dockerfile

@@ -135,16 +135,29 @@ def send_activate(
 # --- clock sync -------------------------------------------------------------
 
 
+def send_clock_sync(*, transport: object) -> None:
+    """One-shot SYNC broadcast -- factored out of run_clock_sync_forever so
+    the control API can trigger one on demand (e.g. "Synchroniser les
+    horloges" in `backend`'s frontend) instead of only ever waiting out
+    the rest of the periodic interval below. Deliberately not gated on
+    `LoraSettings.is_active` -- unlike the automatic loop, a manual
+    trigger is an explicit, immediate request, same as `send_activate`
+    not being gated either.
+    """
+    transport.send(messages.encode_sync(datetime.now()))
+
+
 async def run_clock_sync_forever(*, conn: object, transport: object) -> None:
     """Persistent loop, ported from scheduleNextClockSync/sendOneClockSync:
     broadcasts SYNC on LoraSettings.clock_interval_s while active. No
-    manual trigger needed -- matches legacy's own master-clock behavior,
-    which ran unconditionally once `isActive`/`isMasterClock`.
+    manual trigger needed for the automatic case -- matches legacy's own
+    master-clock behavior, which ran unconditionally once
+    `isActive`/`isMasterClock`.
     """
     while True:
         settings = db.get_lora_settings(conn)
         if settings.is_active:
-            transport.send(messages.encode_sync(datetime.now()))
+            send_clock_sync(transport=transport)
         interval_s = max(settings.clock_interval_s, MIN_CLOCK_INTERVAL_S)
         await asyncio.sleep(interval_s)
 

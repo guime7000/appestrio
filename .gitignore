@@ -6,6 +6,7 @@ __pycache__/
 *.py[cod]
 .venv/
 htmlcov/
+.coverage
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -16,8 +17,4 @@ dist/
 .DS_Store
 
 Specifications/*
-bruno/Devices/Delete Device.bru
-bruno/Devices/Create Device.bru
-bruno/Devices/Get Device.bru
-bruno/Devices/Update Device.bru
-bruno/Groups/Associate devices.bru
+bruno/

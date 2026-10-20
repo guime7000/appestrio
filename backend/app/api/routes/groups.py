@@ -8,6 +8,7 @@ from app.models import (
     BulkDeleteRequest,
     Calendar,
     DevicesPublic,
+    DeviceType,
     Group,
     GroupCreate,
     GroupDevicesUpdate,
@@ -76,6 +77,41 @@ def set_group_devices(
         data=[crud.device_to_public(device) for device in group.devices],
         count=len(group.devices),
     )
+
+
+@router.post("/{group_uuid}/test-calendar", response_model=Message)
+def test_calendar(session: SessionDep, group_uuid: uuid.UUID) -> Message:
+    """Checks whether every lumestrio device in the group is actually in
+    sync with master -- what "Test calendrier" (GroupsView.vue) means: a
+    verification, not a trigger. `config_version` is master's
+    authoritative "current desired config" counter; `synced_version` is
+    the last value lora-daemon has confirmed the device actually applied
+    (from a real PONG, not just "a push was sent") -- see crud.py's
+    `mark_device_synced` for why that distinction matters. The two
+    matching is the actual proof a device is in sync; nothing is pushed
+    or triggered here, this only reads the already-shared DB state.
+    relaystrio members are reported separately since config-sync isn't
+    implemented for them at all yet (item 4 in To_Be_Done.md) -- the
+    comparison wouldn't mean anything for them.
+    """
+    group = _get_group_or_404(session, group_uuid)
+    in_sync = 0
+    pending = 0
+    skipped = 0
+    for device in group.devices:
+        if device.device_type != DeviceType.LUMESTRIO:
+            skipped += 1
+        elif device.config_version == device.synced_version:
+            in_sync += 1
+        else:
+            pending += 1
+
+    parts = [f"{in_sync} lumestrio device(s) in sync"]
+    if pending:
+        parts.append(f"{pending} pending")
+    if skipped:
+        parts.append(f"{skipped} relaystrio skipped (not yet supported)")
+    return Message(message=", ".join(parts))
 
 
 @router.delete("/", response_model=Message)

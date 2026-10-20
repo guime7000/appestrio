@@ -19,4 +19,6 @@ export const groupsApi = {
     api.patch<Paginated<DevicePublic>>(`/groups/${uuid}/devices`, {
       device_ids: deviceIds,
     }),
+  testCalendar: (uuid: string) =>
+    api.post<{ message: string }>(`/groups/${uuid}/test-calendar`, undefined),
 };

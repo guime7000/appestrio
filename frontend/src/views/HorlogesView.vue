@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 
+import { loraSettingsApi } from "@/api/loraSettings";
+
 const now = ref(new Date());
 let timer: ReturnType<typeof setInterval> | undefined;
 
@@ -18,13 +20,32 @@ onMounted(() => {
 onBeforeUnmount(() => {
   clearInterval(timer);
 });
+
+const busy = ref(false);
+
+async function syncClocksNow() {
+  if (busy.value) return;
+  busy.value = true;
+  try {
+    await loraSettingsApi.syncClocksNow();
+  } finally {
+    busy.value = false;
+  }
+}
 </script>
 
 <template>
   <div class="clock-panel">
     <p class="clock-label">Date et heure actuelles de l'hôte</p>
     <p class="clock-value">{{ formatter.format(now) }}</p>
-    <button type="button" class="sync-button">Synchroniser les horloges</button>
+    <button
+      type="button"
+      class="sync-button"
+      :disabled="busy"
+      @click="syncClocksNow"
+    >
+      Synchroniser les horloges
+    </button>
   </div>
 </template>
 

@@ -32,6 +32,9 @@ const detailModalOpen = ref(false);
 const detailGroup = ref<GroupPublic | null>(null);
 const expandedGroupUuids = ref<Set<string>>(new Set());
 
+const testCalendarBusyUuids = ref<Set<string>>(new Set());
+const testCalendarResults = ref<Record<string, string>>({});
+
 const deviceDetailModalOpen = ref(false);
 const deviceDetail = ref<DevicePublic | null>(null);
 
@@ -88,6 +91,22 @@ async function toggleGroupDevicesActive(group: GroupPublic) {
     group.devices.map((device) => devicesApi.update(device.device_id, { active: nextActive })),
   );
   await loadAll();
+}
+
+async function testCalendar(group: GroupPublic) {
+  if (testCalendarBusyUuids.value.has(group.uuid)) return;
+  testCalendarBusyUuids.value.add(group.uuid);
+  try {
+    const { message } = await groupsApi.testCalendar(group.uuid);
+    testCalendarResults.value[group.uuid] = message;
+  } catch (err) {
+    testCalendarResults.value[group.uuid] = err instanceof Error ? err.message : String(err);
+  } finally {
+    testCalendarBusyUuids.value.delete(group.uuid);
+    setTimeout(() => {
+      delete testCalendarResults.value[group.uuid];
+    }, 5000);
+  }
 }
 
 async function createGroup() {
@@ -302,9 +321,18 @@ onMounted(async () => {
               {{ calendarLabel(group) }}
             </a>
             <span v-else>—</span>
-            <button v-if="group.calendar_id" type="button" class="test-calendar-button">
+            <button
+              v-if="group.calendar_id"
+              type="button"
+              class="test-calendar-button"
+              :disabled="testCalendarBusyUuids.has(group.uuid)"
+              @click="testCalendar(group)"
+            >
               Test calendrier
             </button>
+            <span v-if="testCalendarResults[group.uuid]" class="test-calendar-result">
+              {{ testCalendarResults[group.uuid] }}
+            </span>
             <button type="button" @click="openDevicePicker(group)">Associer des appareils</button>
           </td>
         </tr>
@@ -519,6 +547,12 @@ td {
   flex-wrap: nowrap;
   align-items: center;
   gap: 0.5rem;
+}
+
+.test-calendar-result {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  white-space: normal;
 }
 
 .expand-toggle {

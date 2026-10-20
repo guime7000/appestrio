@@ -1,9 +1,10 @@
 import uuid
 
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.core.config import settings
+from app.models import Device
 from app.tests.utils import create_calendar, create_group, device_payload, group_payload
 
 GROUPS_URL = f"{settings.API_V1_STR}/groups/"
@@ -225,5 +226,90 @@ def test_set_group_devices_group_not_found(client: TestClient) -> None:
     response = client.patch(
         f"{GROUPS_URL}{uuid.uuid4()}/devices", json={"device_ids": []}
     )
+
+    assert response.status_code == 404
+
+
+def _mark_synced(session: Session, device_id: str) -> None:
+    """Directly sets synced_version = config_version for a test device --
+    no public API does this (it's lora-daemon's own write, via a real
+    PONG), so tests that need an "in sync" device fake the end state
+    directly on the shared DB, same as lora-daemon would.
+    """
+    device = session.exec(select(Device).where(Device.device_id == device_id)).one()
+    device.synced_version = device.config_version
+    session.add(device)
+    session.commit()
+
+
+def test_test_calendar_reports_in_sync_devices(
+    client: TestClient, session: Session
+) -> None:
+    group = create_group(session)
+    device_a = client.post(
+        DEVICES_URL, json=device_payload(device_type="lumestrio", device_number=1)
+    ).json()
+    device_b = client.post(
+        DEVICES_URL, json=device_payload(device_type="lumestrio", device_number=2)
+    ).json()
+    client.patch(
+        f"{GROUPS_URL}{group.uuid}/devices",
+        json={"device_ids": [device_a["device_id"], device_b["device_id"]]},
+    )
+    _mark_synced(session, device_a["device_id"])
+    _mark_synced(session, device_b["device_id"])
+
+    response = client.post(f"{GROUPS_URL}{group.uuid}/test-calendar")
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "2 lumestrio device(s) in sync"
+
+
+def test_test_calendar_reports_pending_devices(
+    client: TestClient, session: Session
+) -> None:
+    group = create_group(session)
+    device = client.post(
+        DEVICES_URL, json=device_payload(device_type="lumestrio", device_number=1)
+    ).json()
+    client.patch(
+        f"{GROUPS_URL}{group.uuid}/devices",
+        json={"device_ids": [device["device_id"]]},
+    )
+    # Freshly created: config_version=1, synced_version=0 by default --
+    # never confirmed applied, so it's pending without any extra setup.
+
+    response = client.post(f"{GROUPS_URL}{group.uuid}/test-calendar")
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "0 lumestrio device(s) in sync, 1 pending"
+
+
+def test_test_calendar_reports_relaystrio_as_skipped(
+    client: TestClient, session: Session
+) -> None:
+    group = create_group(session)
+    lumestrio = client.post(
+        DEVICES_URL, json=device_payload(device_type="lumestrio", device_number=1)
+    ).json()
+    relaystrio = client.post(
+        DEVICES_URL, json=device_payload(device_type="relaystrio", device_number=1)
+    ).json()
+    client.patch(
+        f"{GROUPS_URL}{group.uuid}/devices",
+        json={"device_ids": [lumestrio["device_id"], relaystrio["device_id"]]},
+    )
+    _mark_synced(session, lumestrio["device_id"])
+
+    response = client.post(f"{GROUPS_URL}{group.uuid}/test-calendar")
+
+    assert response.status_code == 200
+    assert response.json()["message"] == (
+        "1 lumestrio device(s) in sync, 1 relaystrio skipped (not yet supported)"
+    )
+
+
+def test_test_calendar_group_not_found(client: TestClient) -> None:
+    response = client.post(f"{GROUPS_URL}{uuid.uuid4()}/test-calendar")
 
     assert response.status_code == 404

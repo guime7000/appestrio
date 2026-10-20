@@ -139,6 +139,18 @@ def test_send_activate_single_target_does_not_pause(db_path: str) -> None:
 # --- clock sync ---------------------------------------------------------
 
 
+def test_send_clock_sync_sends_regardless_of_is_active() -> None:
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    listener = LoopbackTransport(bus)
+
+    orchestration.send_clock_sync(transport=transport)
+
+    frames = listener.receive_all()
+    assert len(frames) == 1
+    assert frames[0][0] == int(MessageType.SYNC)
+
+
 async def test_run_clock_sync_forever_sends_when_active(db_path: str) -> None:
     conn = db.connect(db_path)
     conn.execute("UPDATE lora_settings SET is_active = 1, clock_interval_s = 1 WHERE id = 1")

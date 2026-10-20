@@ -84,6 +84,13 @@ TEST_PAGE_HTML = b"""<!doctype html>
   </div>
 </fieldset>
 
+<h2>Clock sync</h2>
+<fieldset>
+  <div class="row">
+    <button onclick="call('POST','/clock-sync')">Sync clocks now</button>
+  </div>
+</fieldset>
+
 <h2>Calendar / config sync</h2>
 <fieldset>
   <div class="row">

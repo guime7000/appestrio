@@ -189,6 +189,9 @@ def _dispatch(
         return _json(200, {"paused": False})
     if method == "POST" and path == "/activate":
         return _activate(body, scheduler, transport)
+    if method == "POST" and path == "/clock-sync":
+        orchestration.send_clock_sync(transport=transport)
+        return _json(200, {"sent": True})
     raise ControlApiError(404, f"no route for {method} {path}")
 
 

@@ -19,6 +19,7 @@ from lora_daemon.scheduler import PingScheduler
 from lora_daemon.transport import LoopbackBus, LoopbackTransport
 
 LUMESTRIO_3_ADDRESS = build_address(3, LoraDeviceType.LUMESTRIO)
+RELAYSTRIO_1_ADDRESS = build_address(1, LoraDeviceType.RELAYSTRIO)
 
 
 def _insert_device(conn, **overrides) -> None:
@@ -199,20 +200,82 @@ async def test_sync_device_config_unknown_device(db_path: str) -> None:
     assert result is False
 
 
-async def test_sync_device_config_rejects_relaystrio(db_path: str) -> None:
+async def test_sync_device_config_relaystrio_happy_path(db_path: str) -> None:
     conn = db.connect(db_path)
-    _insert_device(conn, device_id="relaystrio1", device_type="relaystrio")
-    bus = LoopbackBus()
-    scheduler = PingScheduler(conn=conn, transport=LoopbackTransport(bus))
-
-    result = await orchestration.sync_device_config(
-        conn=conn,
-        transport=LoopbackTransport(bus),
-        scheduler=scheduler,
+    _insert_device(
+        conn,
         device_id="relaystrio1",
+        device_type="relaystrio",
+        config_version=3,
+        synced_version=0,
     )
+    conn.execute("UPDATE lora_settings SET is_active = 1 WHERE id = 1")
+    conn.commit()
 
-    assert result is False
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    listener = LoopbackTransport(bus)
+    device = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+
+    ping_task = asyncio.create_task(scheduler.run_forever())
+
+    async def device_responder() -> None:
+        while True:
+            for frame in device.receive_all():
+                if not frame or frame[0] != int(MessageType.PING):
+                    continue
+                ping = decode_ping(frame)
+                if ping.ping_type == PingType.WITH_MISSING_PARTS:
+                    device.send(
+                        encode_pong(
+                            address=RELAYSTRIO_1_ADDRESS, active=True, missing_parts=[]
+                        )
+                    )
+            await asyncio.sleep(0.01)
+
+    responder_task = asyncio.create_task(device_responder())
+
+    try:
+        result = await orchestration.sync_device_config(
+            conn=conn,
+            transport=transport,
+            scheduler=scheduler,
+            device_id="relaystrio1",
+            chunk_delay_s=0.01,
+            missing_check_interval_s=0.05,
+            missing_reply_timeout_s=0.5,
+            max_missing_checks=3,
+        )
+    finally:
+        await _cancel(ping_task)
+        await _cancel(responder_task)
+
+    assert result is True
+    row = conn.execute(
+        "SELECT synced_version FROM devices WHERE device_id = ?", ("relaystrio1",)
+    ).fetchone()
+    assert row[0] == 3
+
+    num_parts = None
+    chunks: dict[int, bytes] = {}
+    for frame in listener.receive_all():
+        if not frame or frame[0] != int(MessageType.FILE_MSG):
+            continue
+        if frame[1] == FILE_MSG_START:
+            start = decode_file_msg_start_versioned(frame)
+            assert start.targets == ((RELAYSTRIO_1_ADDRESS, 3),)
+            num_parts = start.num_parts
+        else:
+            chunk = decode_file_msg(frame)
+            chunks[chunk.index] = chunk.data
+    assert num_parts == len(chunks)
+    body = b"".join(chunks[i] for i in range(num_parts))
+    # No calendar assigned (no group_id) -- the real relaystrio Agenda
+    # shape, converted to an always-off schedule, not config_payload's
+    # lumestrio-only JSON.
+    assert b'"defaultWeek"' in body
+    assert b'"agendaExceptionList"' in body
 
 
 async def test_sync_device_config_happy_path(db_path: str) -> None:
@@ -318,7 +381,7 @@ async def test_sync_device_config_gives_up_when_no_reply(db_path: str) -> None:
 # --- run_agenda_sync_forever ----------------------------------------------
 
 
-async def test_run_agenda_sync_forever_skips_relaystrio(
+async def test_run_agenda_sync_forever_syncs_relaystrio(
     db_path: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     conn = db.connect(db_path)
@@ -342,10 +405,10 @@ async def test_run_agenda_sync_forever_skips_relaystrio(
             conn=conn, transport=transport, scheduler=scheduler, interval_s=0.05
         )
     )
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.02)
     await _cancel(task)
 
-    assert called == []  # relaystrio1 skipped -- not yet supported
+    assert called == ["relaystrio1"]  # relaystrio is now supported, not skipped
 
 
 async def test_run_agenda_sync_forever_syncs_lumestrio(

@@ -7,10 +7,12 @@ endpoint's own reply-side behavior is a separate, not-yet-built piece.
 
 Scope, and one real divergence from legacy worth flagging:
 
-- **`lumestrio` only.** `relaystrio`'s Agenda-JSON conversion isn't built
-  yet (Lora_Rewrite_Plan.md §9.9's "missing" note), so this module can't
-  push anything to it -- a pending `relaystrio` device is skipped, not
-  attempted, and stays pending.
+- **`relaystrio` support added 2026-10-24** (item 4) via
+  `relaystrio_agenda.build_relaystrio_agenda` -- `sync_device_config`
+  builds whichever JSON shape matches the target's `device_type`
+  (`config_payload`'s full config for `lumestrio`, the converted
+  `Agenda` JSON for `relaystrio`) before the generic chunked `FILE_MSG`
+  transfer below, which is otherwise identical for both.
 - **Per-device transfers, not per-group broadcasts.** Legacy sent one
   shared agenda *file* to every device in a real Group at once -- a
   genuine airtime optimization, since every member received
@@ -48,10 +50,11 @@ configured -- silently invalidating any test if it didn't happen to match
 """
 
 import asyncio
+import json
 import logging
 from datetime import datetime
 
-from . import config_payload, db, hexconf, messages
+from . import config_payload, db, hexconf, messages, relaystrio_agenda
 from .constants import FILE_CHUNK_SIZE, MIN_CLOCK_INTERVAL_S
 from .devices import address_for_device_id
 from .messages import PingType
@@ -220,30 +223,36 @@ async def sync_device_config(
     missing_reply_timeout_s: float = DEFAULT_MISSING_REPLY_TIMEOUT_S,
     max_missing_checks: int = DEFAULT_MAX_MISSING_CHECKS,
 ) -> bool:
-    """Pushes one lumestrio device's full resolved config over a single
-    versioned FILE_MSG transfer, then verifies delivery via
-    WITH_MISSING_PARTS pings, resending only what's missing. Returns True
-    if fully delivered (and marks it synced via mark_device_synced), False
-    otherwise -- an undelivered device simply stays pending
-    (config_version != synced_version) and gets retried on the next call,
-    per the automatic cyclic-sync design (§9.7).
+    """Pushes one device's full resolved config over a single versioned
+    FILE_MSG transfer, then verifies delivery via WITH_MISSING_PARTS
+    pings, resending only what's missing. Returns True if fully delivered
+    (and marks it synced via mark_device_synced), False otherwise -- an
+    undelivered device simply stays pending (config_version !=
+    synced_version) and gets retried on the next call, per the automatic
+    cyclic-sync design (§9.7). Builds whichever wire shape matches the
+    target's device_type (see module docstring).
     """
     config = db.resolve_device_config(conn, device_id)
     if config is None:
         logger.error("sync_device_config: unknown device_id %r", device_id)
         return False
-    if config.device_type != "lumestrio":
+
+    if config.device_type == "lumestrio":
+        body = config_payload.build_device_config_payload(config).to_json_bytes()
+    elif config.device_type == "relaystrio":
+        settings = db.get_lora_settings(conn)
+        agenda = relaystrio_agenda.build_relaystrio_agenda(
+            config.calendar,
+            recurring_threshold_days=settings.relaystrio_recurring_threshold_days,
+        )
+        body = json.dumps(agenda, separators=(",", ":")).encode("utf-8")
+    else:
         logger.error(
-            "sync_device_config: %r is device_type=%r, not lumestrio -- "
-            "relaystrio's Agenda-JSON conversion isn't built yet "
-            "(Lora_Rewrite_Plan.md 9.9)",
-            device_id,
-            config.device_type,
+            "sync_device_config: %r has unknown device_type=%r", device_id, config.device_type
         )
         return False
 
     address = address_for_device_id(config.device_id, config.device_type)
-    body = config_payload.build_device_config_payload(config).to_json_bytes()
     chunks = _chunk(body, FILE_CHUNK_SIZE)
 
     scheduler.pause()
@@ -306,20 +315,13 @@ async def run_agenda_sync_forever(
     interval_s: float = DEFAULT_AGENDA_SYNC_INTERVAL_S,
 ) -> None:
     """Automatic cyclic config push: on each tick, finds every device
-    whose config_version != synced_version and pushes to the lumestrio
-    ones (relaystrio pending devices are skipped -- see module docstring).
+    whose config_version != synced_version and pushes to it, lumestrio
+    and relaystrio alike (see module docstring).
     """
     while True:
         settings = db.get_lora_settings(conn)
         if settings.is_active:
             for pending in db.get_pending_sync_devices(conn):
-                if pending.device_type != "lumestrio":
-                    logger.debug(
-                        "skipping pending %s device %s (not yet supported)",
-                        pending.device_type,
-                        pending.device_id,
-                    )
-                    continue
                 await sync_device_config(
                     conn=conn, transport=transport, scheduler=scheduler, device_id=pending.device_id
                 )

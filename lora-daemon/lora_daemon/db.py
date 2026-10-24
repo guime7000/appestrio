@@ -247,6 +247,11 @@ class LoraSettingsRow:
     channel: int
     speed: int
     fec: bool
+    # Master-side-only threshold (never transmitted -- relaystrio only
+    # ever sees relaystrio_agenda.py's finished output); classifies each
+    # IgnitionPreset as "recurring" vs "temporary override" by date-range
+    # length. See app/models/lora_settings.py's comment for the full why.
+    relaystrio_recurring_threshold_days: int
 
 
 def get_lora_settings(conn: sqlite3.Connection) -> LoraSettingsRow:
@@ -255,8 +260,8 @@ def get_lora_settings(conn: sqlite3.Connection) -> LoraSettingsRow:
     migration, see app/models/lora_settings.py).
     """
     row = conn.execute(
-        "SELECT is_active, ping_interval_s, clock_interval_s, channel, speed, fec "
-        "FROM lora_settings WHERE id = 1"
+        "SELECT is_active, ping_interval_s, clock_interval_s, channel, speed, fec, "
+        "relaystrio_recurring_threshold_days FROM lora_settings WHERE id = 1"
     ).fetchone()
     if row is None:
         raise SchemaMismatchError("lora_settings singleton row (id=1) is missing")
@@ -267,6 +272,7 @@ def get_lora_settings(conn: sqlite3.Connection) -> LoraSettingsRow:
         channel=row["channel"],
         speed=row["speed"],
         fec=bool(row["fec"]),
+        relaystrio_recurring_threshold_days=row["relaystrio_recurring_threshold_days"],
     )
 
 

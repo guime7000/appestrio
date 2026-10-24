@@ -190,7 +190,13 @@ def test_get_lora_settings_default_row(db_path: str) -> None:
     # not legacy's own software default -- see
     # app/models/lora_settings.py's comment (backend).
     assert settings == db.LoraSettingsRow(
-        is_active=False, ping_interval_s=5, clock_interval_s=60, channel=0, speed=2, fec=True
+        is_active=False,
+        ping_interval_s=5,
+        clock_interval_s=60,
+        channel=0,
+        speed=2,
+        fec=True,
+        relaystrio_recurring_threshold_days=2,
     )
 
 

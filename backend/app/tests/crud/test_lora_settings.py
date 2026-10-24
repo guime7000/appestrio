@@ -19,6 +19,7 @@ def test_get_lora_settings_creates_singleton_with_default_matching_relaystrio(
     assert settings.fec is True
     assert settings.ping_interval_s == 5
     assert settings.clock_interval_s == 60
+    assert settings.relaystrio_recurring_threshold_days == 2
 
 
 def test_get_lora_settings_is_idempotent(session: Session) -> None:

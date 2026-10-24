@@ -21,6 +21,7 @@ def test_get_lora_settings_defaults(client: TestClient) -> None:
     assert content["fec"] is True
     assert content["ping_interval_s"] == 5
     assert content["clock_interval_s"] == 60
+    assert content["relaystrio_recurring_threshold_days"] == 2
     assert "id" not in content
 
 
@@ -33,6 +34,25 @@ def test_update_lora_settings(client: TestClient) -> None:
     assert content["is_active"] is True
     # Untouched fields keep their value: PATCH is partial.
     assert content["speed"] == 2
+
+
+def test_update_lora_settings_relaystrio_recurring_threshold(client: TestClient) -> None:
+    response = client.patch(
+        LORA_SETTINGS_URL, json={"relaystrio_recurring_threshold_days": 30}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["relaystrio_recurring_threshold_days"] == 30
+
+
+def test_update_lora_settings_rejects_non_positive_relaystrio_recurring_threshold(
+    client: TestClient,
+) -> None:
+    response = client.patch(
+        LORA_SETTINGS_URL, json={"relaystrio_recurring_threshold_days": 0}
+    )
+
+    assert response.status_code == 422
 
 
 def test_update_lora_settings_rejects_out_of_range_channel(client: TestClient) -> None:

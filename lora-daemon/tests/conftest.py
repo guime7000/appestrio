@@ -62,6 +62,7 @@ CREATE TABLE lora_settings (
     fec INTEGER NOT NULL DEFAULT 1,
     ping_interval_s INTEGER NOT NULL DEFAULT 5,
     clock_interval_s INTEGER NOT NULL DEFAULT 60,
+    relaystrio_recurring_threshold_days INTEGER NOT NULL DEFAULT 2,
     updated_at TEXT NOT NULL DEFAULT ''
 );
 INSERT INTO lora_settings (id, is_active, ping_interval_s, clock_interval_s)

@@ -28,6 +28,18 @@ DEFAULT_CHANNEL = 0
 DEFAULT_SPEED = 2
 DEFAULT_PING_INTERVAL_S = 5
 DEFAULT_CLOCK_INTERVAL_S = 60
+MIN_RELAYSTRIO_RECURRING_THRESHOLD_DAYS = 1
+
+# `relaystrio`'s frozen Agenda schema (SchedulerAPI.h) has no per-weekday
+# date restriction within an exception -- only the native Calendar model
+# does. lora-daemon's relaystrio_agenda.py classifies each IgnitionPreset
+# as "recurring" (-> defaultWeek, cheap) vs "temporary override" (->
+# agendaExceptionList, can require day-by-day expansion) by comparing its
+# own date-range length against this threshold. Master-side-only: never
+# transmitted to any device (relaystrio only ever sees the finished
+# Agenda; lumestrio doesn't go through this conversion at all) -- see
+# Lora_Rewrite_Plan.md's item 4 section for the full design discussion.
+DEFAULT_RELAYSTRIO_RECURRING_THRESHOLD_DAYS = 2
 
 
 class LoraSettingsBase(SQLModel):
@@ -37,6 +49,10 @@ class LoraSettingsBase(SQLModel):
     fec: bool = Field(default=True)
     ping_interval_s: int = Field(default=DEFAULT_PING_INTERVAL_S, ge=MIN_PING_INTERVAL_S)
     clock_interval_s: int = Field(default=DEFAULT_CLOCK_INTERVAL_S, ge=MIN_CLOCK_INTERVAL_S)
+    relaystrio_recurring_threshold_days: int = Field(
+        default=DEFAULT_RELAYSTRIO_RECURRING_THRESHOLD_DAYS,
+        ge=MIN_RELAYSTRIO_RECURRING_THRESHOLD_DAYS,
+    )
 
 
 class LoraSettings(LoraSettingsBase, table=True):
@@ -57,6 +73,9 @@ class LoraSettingsUpdate(SQLModel):
     fec: bool | None = None
     ping_interval_s: int | None = Field(default=None, ge=MIN_PING_INTERVAL_S)
     clock_interval_s: int | None = Field(default=None, ge=MIN_CLOCK_INTERVAL_S)
+    relaystrio_recurring_threshold_days: int | None = Field(
+        default=None, ge=MIN_RELAYSTRIO_RECURRING_THRESHOLD_DAYS
+    )
 
 
 class LoraSettingsPublic(LoraSettingsBase):

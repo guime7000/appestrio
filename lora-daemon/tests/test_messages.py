@@ -63,6 +63,42 @@ def test_pong_with_missing_parts_empty() -> None:
     assert pong.missing_parts == ()
 
 
+def test_pong_with_config_version_round_trip() -> None:
+    buf = m.encode_pong(address=5, active=True, config_version=42)
+    pong = m.decode_pong(buf, expect_config_version=True)
+    assert pong.config_version == 42
+
+
+def test_pong_config_version_and_agenda_md5_round_trip_together() -> None:
+    buf = m.encode_pong(
+        address=5, active=True, config_version=42, agenda_md5="abcdef1234567890"
+    )
+    pong = m.decode_pong(buf, expect_config_version=True, expect_agenda_md5=True)
+    assert pong.config_version == 42
+    assert pong.agenda_md5 == "abcdef12"
+
+
+def test_pong_config_version_and_missing_parts_round_trip_together() -> None:
+    buf = m.encode_pong(
+        address=5, active=True, config_version=42, missing_parts=[0, 2]
+    )
+    pong = m.decode_pong(buf, expect_config_version=True, expect_missing_parts=True)
+    assert pong.config_version == 42
+    assert pong.missing_parts == (0, 2)
+
+
+def test_pong_config_version_truncates_to_two_bytes() -> None:
+    buf = m.encode_pong(address=5, active=True, config_version=0x1FFFF)
+    pong = m.decode_pong(buf, expect_config_version=True)
+    assert pong.config_version == 0xFFFF
+
+
+def test_pong_rejects_truncated_config_version() -> None:
+    buf = bytes([int(m.MessageType.PONG), 5, 1, 0])  # only 1 of 2 version bytes
+    with pytest.raises(m.MalformedMessageError, match="too short"):
+        m.decode_pong(buf, expect_config_version=True)
+
+
 def test_activate_round_trip() -> None:
     buf = m.encode_activate(True, [3, 40])
     activate = m.decode_activate(buf)

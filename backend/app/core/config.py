@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     # depending on a `devices` row that might not exist yet on a device
     # that hasn't received its first config push (Docs/To_Be_Done.md
     # item 9).
-    IS_MASTER: bool = False
+    IS_MASTER: bool = True
 
     @computed_field  # type: ignore[prop-decorator]
     @property

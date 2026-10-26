@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { useTheme } from "@/composables/useTheme";
+import { computed, onMounted } from "vue";
 
-const navLinks = [
+import { useTheme } from "@/composables/useTheme";
+import { useWhoAmIStore } from "@/stores/whoami";
+
+const whoami = useWhoAmIStore();
+onMounted(() => {
+  whoami.load();
+});
+
+const navLinks = computed(() => [
   { to: "/", label: "Inauguration" },
-  { to: "/configuration", label: "Configuration" },
-];
+  ...(whoami.isMaster ? [{ to: "/configuration", label: "Configuration" }] : []),
+]);
 
 const { theme, toggleTheme } = useTheme();
 </script>

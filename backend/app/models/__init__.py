@@ -9,7 +9,7 @@ from app.models.calendars import (
     CalendarSummaryPublic,
     CalendarUpdate,
 )
-from app.models.common import BulkDeleteRequest, Message, utcnow
+from app.models.common import BulkDeleteRequest, Message, WhoAmI, utcnow
 from app.models.devices import (
     LORA_TYPE_INDEX,
     MAX_DEVICES_PER_TYPE,
@@ -117,5 +117,6 @@ __all__ = [
     "LoraSettingsPublic",
     "LoraSettingsUpdate",
     "Message",
+    "WhoAmI",
     "utcnow",
 ]

@@ -14,3 +14,7 @@ class Message(SQLModel):
 
 class BulkDeleteRequest(SQLModel):
     uuids: list[UUID] = Field(min_length=1)
+
+
+class WhoAmI(SQLModel):
+    is_master: bool

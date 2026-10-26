@@ -56,6 +56,15 @@ class Settings(BaseSettings):
     # are separate containers.
     LORA_DAEMON_URL: str = "http://lora-daemon:8765"
 
+    # Set to true via one environment variable on exactly one Pi at
+    # deploy time -- the one exception to "no local setup at all" (every
+    # other config field comes from master via LoRa). `/whoami` reads
+    # this directly so the frontend can gate configuration pages without
+    # depending on a `devices` row that might not exist yet on a device
+    # that hasn't received its first config push (Docs/To_Be_Done.md
+    # item 9).
+    IS_MASTER: bool = False
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:

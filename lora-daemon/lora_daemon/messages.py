@@ -18,11 +18,28 @@ from .constants import BROADCAST_ADDRESS, FILE_MSG_START, MAX_MSG_SIZE, MessageT
 
 _DATE_FORMAT = "%d/%m/%Y %H:%M:%S"
 
+# Shared by PONG's config_version field and the FILE_MSG versioned start
+# frame further below -- one internal width convention, not two. Not a
+# protocol lock-in like relaystrio's format is (both uses are lumestrio-
+# only, new code with no legacy wire-compatibility constraint): it can
+# change later without a compatibility concern.
+_VERSION_BYTES = 2
+_VERSION_MAX = (1 << (8 * _VERSION_BYTES)) - 1
+
 
 class PingType(IntEnum):
     PLAIN = 0
     WITH_AGENDA_MD5 = 1
     WITH_MISSING_PARTS = 2
+    # lumestrio-only (item 8 step 2) -- relaystrio firmware has no
+    # config_version concept at all (see the FILE_MSG-versioned-start
+    # section below) and master only ever requests this pingType from
+    # addresses it already knows are lumestrio, so relaystrio never has
+    # to understand it. Lets master confirm a lumestrio slave is
+    # genuinely synced -- the device's own self-reported applied version,
+    # not master's inference from "no chunks were reported missing"
+    # (see Lora_Rewrite_Plan.md's synced_version-trust-gap note).
+    WITH_CONFIG_VERSION = 3
 
 
 class MalformedMessageError(ValueError):
@@ -103,6 +120,7 @@ def decode_ping(buf: bytes) -> Ping:
 class Pong:
     address: int
     active: bool
+    config_version: int | None = None
     agenda_md5: str | None = None
     missing_parts: tuple[int, ...] | None = None
 
@@ -111,10 +129,15 @@ def encode_pong(
     *,
     address: int,
     active: bool,
+    config_version: int | None = None,
     agenda_md5: str | None = None,
     missing_parts: list[int] | None = None,
 ) -> bytes:
     buf = bytes([MessageType.PONG, address, int(active)])
+    if config_version is not None:
+        # Same 2-byte big-endian width as the FILE_MSG versioned start
+        # frame below -- one internal convention, not two.
+        buf += (config_version & _VERSION_MAX).to_bytes(_VERSION_BYTES, "big")
     if agenda_md5 is not None:
         buf += agenda_md5[:8].encode() + b"\x00"
     if missing_parts is not None:
@@ -123,19 +146,37 @@ def encode_pong(
 
 
 def decode_pong(
-    buf: bytes, *, expect_agenda_md5: bool = False, expect_missing_parts: bool = False
+    buf: bytes,
+    *,
+    expect_config_version: bool = False,
+    expect_agenda_md5: bool = False,
+    expect_missing_parts: bool = False,
 ) -> Pong:
     _require(len(buf) >= 3, "PONG message too short")
     address = buf[1]
     active = bool(buf[2])
+    offset = 3
+    config_version = None
+    if expect_config_version:
+        _require(
+            len(buf) >= offset + _VERSION_BYTES, "PONG message too short for config_version"
+        )
+        config_version = int.from_bytes(buf[offset : offset + _VERSION_BYTES], "big")
+        offset += _VERSION_BYTES
     agenda_md5 = None
     missing_parts = None
     if expect_missing_parts:
-        missing_parts = tuple(buf[3:])
-    elif expect_agenda_md5 and len(buf) > 4:
-        end = buf.index(0, 3) if 0 in buf[3:] else len(buf)
-        agenda_md5 = buf[3:end].decode("utf-8")
-    return Pong(address=address, active=active, agenda_md5=agenda_md5, missing_parts=missing_parts)
+        missing_parts = tuple(buf[offset:])
+    elif expect_agenda_md5 and len(buf) > offset + 1:
+        end = buf.index(0, offset) if 0 in buf[offset:] else len(buf)
+        agenda_md5 = buf[offset:end].decode("utf-8")
+    return Pong(
+        address=address,
+        active=active,
+        config_version=config_version,
+        agenda_md5=agenda_md5,
+        missing_parts=missing_parts,
+    )
 
 
 # --- ACTIVATE ---------------------------------------------------------
@@ -247,8 +288,6 @@ def decode_file_msg(buf: bytes) -> FileMsgStart | FileMsgChunk:
 # needs more than max_versioned_targets(), that's the actual fix needed,
 # not a bigger number here.
 
-_VERSION_BYTES = 2
-_VERSION_MAX = (1 << (8 * _VERSION_BYTES)) - 1
 _FILE_MSG_START_HEADER_SIZE = 3  # [FILE_MSG, FILE_MSG_START, num_parts]
 
 # Current *operational policy* (a deliberate choice with real headroom

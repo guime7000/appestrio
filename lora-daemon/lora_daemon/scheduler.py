@@ -116,6 +116,16 @@ class PingScheduler:
         self._wake = asyncio.Event()
         self._paused = False
         self.last_pongs: dict[int, PongInfo] = {}
+        # Item 8 steps 2-3: this scheduler is the sole poller of the
+        # shared transport (see _poll_transport/poll_incoming below) --
+        # anything other than a PONG is this hook's concern, not ours.
+        # Deliberately not "two independent pollers on one transport":
+        # LoopbackTransport.receive_all() (and the real socket transport
+        # alike) is a destructive drain, so only one consumer can ever
+        # see a given incoming frame; a second independent poller would
+        # silently race this one for every frame instead of also seeing
+        # it.
+        self.on_other_frame: object = None  # Callable[[bytes], None] | None
 
         # Extension points for the orchestration work (item 2) to feed
         # real values into: agenda-disabled state, WITH_MISSING_PARTS
@@ -206,8 +216,12 @@ class PingScheduler:
             self._handle_frame(buf)
 
     def _handle_frame(self, buf: bytes) -> None:
-        if not buf or buf[0] != int(MessageType.PONG):
-            return  # only PONGs are this scheduler's concern
+        if not buf:
+            return
+        if buf[0] != int(MessageType.PONG):
+            if self.on_other_frame is not None:
+                self.on_other_frame(buf)
+            return  # only PONGs are this scheduler's own concern
         pong = messages.decode_pong(
             buf,
             expect_agenda_md5=self._last_ping_type == PingType.WITH_AGENDA_MD5,

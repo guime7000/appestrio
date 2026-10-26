@@ -16,7 +16,9 @@ backend-owned; this module only ever reads them.
 
 import json
 import sqlite3
+import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 REQUIRED_DEVICE_COLUMNS = {
     "device_id",
@@ -34,6 +36,27 @@ REQUIRED_DEVICE_COLUMNS = {
     "synced_version",
     "last_seen",
     "last_roundtrip_ms",
+    "created_at",
+    "updated_at",
+}
+
+# Checked only since item 8 step 2 (apply_pushed_config) started writing
+# to these tables directly -- before that, lora-daemon only ever read
+# devices/groups/calendars/ignition_presets, never created rows in the
+# latter three, so there was nothing to validate here.
+REQUIRED_GROUP_COLUMNS = {"uuid", "label", "calendar_id", "created_at", "updated_at"}
+REQUIRED_CALENDAR_COLUMNS = {"uuid", "label", "weekdays", "created_at", "updated_at"}
+REQUIRED_IGNITION_PRESET_COLUMNS = {
+    "uuid",
+    "calendar_id",
+    "name",
+    "description",
+    "start_date",
+    "stop_date",
+    "start_time",
+    "stop_time",
+    "created_at",
+    "updated_at",
 }
 
 
@@ -59,13 +82,19 @@ def connect(db_path: str, *, busy_timeout_ms: int = 5000) -> sqlite3.Connection:
 
 
 def _check_schema(conn: sqlite3.Connection) -> None:
-    columns = {row["name"] for row in conn.execute("PRAGMA table_info(devices)")}
-    missing = REQUIRED_DEVICE_COLUMNS - columns
-    if missing:
-        raise SchemaMismatchError(
-            f"devices table is missing expected column(s): {sorted(missing)} -- "
-            "backend schema and lora-daemon's db.py have drifted apart"
-        )
+    for table, required in (
+        ("devices", REQUIRED_DEVICE_COLUMNS),
+        ("groups", REQUIRED_GROUP_COLUMNS),
+        ("calendars", REQUIRED_CALENDAR_COLUMNS),
+        ("ignition_presets", REQUIRED_IGNITION_PRESET_COLUMNS),
+    ):
+        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        missing = required - columns
+        if missing:
+            raise SchemaMismatchError(
+                f"{table} table is missing expected column(s): {sorted(missing)} -- "
+                "backend schema and lora-daemon's db.py have drifted apart"
+            )
 
 
 @dataclass(frozen=True)
@@ -323,3 +352,145 @@ def list_devices_status(conn: sqlite3.Connection) -> list[DeviceStatusRow]:
         )
         for r in rows
     ]
+
+
+def _sql_timestamp() -> str:
+    """Matches the plain "YYYY-MM-DD HH:MM:SS" string backend's own
+    SQLAlchemy DateTime columns actually store in SQLite (confirmed by
+    inspecting a real migrated row directly, not assumed) -- naive-
+    looking but computed from UTC, consistent with common.utcnow()
+    backend-side.
+    """
+    return datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def apply_pushed_config(
+    conn: sqlite3.Connection,
+    *,
+    device_type: str,
+    device_number: int,
+    payload: dict,
+) -> str:
+    """Applies a fully-reassembled config_payload.py-shaped JSON body to
+    this device's own local DB -- the receive-side counterpart to
+    orchestration.sync_device_config's push, and the mechanism that makes
+    the very first FILE_MSG a device ever receives double as its own
+    provisioning (Lora_Rewrite_Plan.md item 8's design note).
+
+    Wipes and recreates groups/calendars/ignition_presets wholesale on
+    every call rather than diffing -- the payload carries no stable IDs
+    for any of the three (only a group label and an inline calendar by
+    value, no UUIDs), and a lumestrio's own local copies of these tables
+    exist purely as a mirror of whatever master last pushed (nothing else
+    ever writes to them locally, since config pages are hidden on a
+    non-master device -- item 9's whoami-gating), so there's nothing else
+    to preserve across a push.
+
+    `active`/`is_master` are deliberately never set from `payload` --
+    `active` is state, delivered solely via ACTIVATE and reconciled from
+    real PONGs (see scheduler.py's reconcile_device_active), never
+    overwritten by a config push; `is_master` is always local-only and
+    False on a slave. A brand-new device starts `active=0` (off) until
+    something explicit says otherwise -- same fail-safe direction as
+    every other default in this system.
+
+    Returns the device_id this device just applied its own config as
+    (device_type + device_number, e.g. "lumestrio3") -- callers report
+    this back to master, together with the applied config_version, via
+    PONG's WITH_CONFIG_VERSION reply.
+    """
+    device_id = f"{device_type}{device_number}"
+    now = _sql_timestamp()
+    config_version = payload["config_version"]
+    calendar_payload = payload.get("calendar")
+    group_label = payload.get("group")
+
+    with conn:
+        conn.execute("DELETE FROM ignition_presets")
+        conn.execute("DELETE FROM calendars")
+        conn.execute("DELETE FROM groups")
+
+        group_id = None
+        if group_label is not None:
+            calendar_id = None
+            if calendar_payload is not None:
+                calendar_id = str(uuid.uuid4())
+                conn.execute(
+                    "INSERT INTO calendars (uuid, label, weekdays, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (
+                        calendar_id,
+                        calendar_payload["label"],
+                        json.dumps(calendar_payload["weekdays"]),
+                        now,
+                        now,
+                    ),
+                )
+                for preset in calendar_payload.get("ignition_presets", []):
+                    conn.execute(
+                        "INSERT INTO ignition_presets (uuid, calendar_id, name, description, "
+                        "start_date, stop_date, start_time, stop_time, created_at, updated_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            str(uuid.uuid4()),
+                            calendar_id,
+                            preset["name"],
+                            preset.get("description"),
+                            preset["start_date"],
+                            preset["stop_date"],
+                            preset["start_time"],
+                            preset["stop_time"],
+                            now,
+                            now,
+                        ),
+                    )
+            group_id = str(uuid.uuid4())
+            conn.execute(
+                "INSERT INTO groups (uuid, label, calendar_id, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (group_id, group_label, calendar_id, now, now),
+            )
+
+        existing = conn.execute(
+            "SELECT uuid FROM devices WHERE device_id = ?", (device_id,)
+        ).fetchone()
+        if existing is None:
+            conn.execute(
+                "INSERT INTO devices (uuid, device_id, device_name, device_type, active, "
+                "is_master, handles_audio, handles_dmx, audiofile, ip, master_ip, group_id, "
+                "config_version, synced_version, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?)",
+                (
+                    str(uuid.uuid4()),
+                    device_id,
+                    payload["device_name"],
+                    device_type,
+                    int(payload["handles_audio"]),
+                    int(payload["handles_dmx"]),
+                    payload.get("audiofile"),
+                    group_id,
+                    config_version,
+                    config_version,
+                    now,
+                    now,
+                ),
+            )
+        else:
+            conn.execute(
+                "UPDATE devices SET device_name = ?, handles_audio = ?, handles_dmx = ?, "
+                "audiofile = ?, group_id = ?, config_version = ?, synced_version = ?, "
+                "updated_at = ? WHERE device_id = ?",
+                (
+                    payload["device_name"],
+                    int(payload["handles_audio"]),
+                    int(payload["handles_dmx"]),
+                    payload.get("audiofile"),
+                    group_id,
+                    config_version,
+                    config_version,
+                    now,
+                    device_id,
+                ),
+            )
+
+    return device_id

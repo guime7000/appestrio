@@ -1,5 +1,6 @@
 import uuid
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
@@ -253,3 +254,42 @@ def test_delete_devices_bulk_not_found(client: TestClient) -> None:
 
     assert response.status_code == 404
     assert client.get(DEVICES_URL).json()["count"] == 1
+
+
+def test_activate_device_calls_apply_active_state(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Not caplog: alembic's env.py calls logging.config.fileConfig() during
+    # this fixture's own lifespan-triggered migration run, which disables
+    # every logger that already existed and isn't named in alembic.ini --
+    # including this module's, before any test body ever runs. Asserting
+    # the real call (and its arguments) is also a stronger check than
+    # matching log text would have been.
+    calls = []
+    monkeypatch.setattr(
+        "app.api.routes.devices.apply_active_state",
+        lambda **kwargs: calls.append(kwargs),
+    )
+    created = client.post(
+        DEVICES_URL, json=device_payload(handles_audio=True, audiofile="track.mp3")
+    ).json()
+
+    response = client.post(f"{DEVICES_URL}{created['device_id']}/activate", json={"active": True})
+
+    assert response.status_code == 200
+    assert response.json()["message"] == f"activation applied for {created['device_id']}"
+    assert calls == [
+        {
+            "device_id": created["device_id"],
+            "active": True,
+            "handles_audio": True,
+            "handles_dmx": False,
+            "audiofile": "track.mp3",
+        }
+    ]
+
+
+def test_activate_device_not_found(client: TestClient) -> None:
+    response = client.post(f"{DEVICES_URL}nosuchdevice/activate", json={"active": True})
+
+    assert response.status_code == 404

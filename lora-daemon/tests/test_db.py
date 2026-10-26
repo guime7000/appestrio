@@ -222,3 +222,152 @@ def test_list_device_identities(db_path: str) -> None:
         "a": "lumestrio",
         "b": "relaystrio",
     }
+
+
+def _config_payload(**overrides) -> dict:
+    base = {
+        "config_version": 7,
+        "device_name": "Le 3e lumestrio",
+        "handles_audio": True,
+        "handles_dmx": False,
+        "audiofile": "song.mp3",
+        "group": "Jardin",
+        "calendar": {
+            "label": "Été",
+            "weekdays": [6, 7],
+            "ignition_presets": [
+                {
+                    "name": "Soirée",
+                    "description": None,
+                    "start_date": "01/06/2026",
+                    "stop_date": "31/08/2026",
+                    "start_time": "20:00",
+                    "stop_time": "23:30",
+                }
+            ],
+        },
+    }
+    base.update(overrides)
+    return base
+
+
+def test_apply_pushed_config_first_time_self_provisions(db_path: str) -> None:
+    conn = db.connect(db_path)
+
+    device_id = db.apply_pushed_config(
+        conn, device_type="lumestrio", device_number=3, payload=_config_payload()
+    )
+
+    assert device_id == "lumestrio3"
+    device = conn.execute("SELECT * FROM devices WHERE device_id = ?", (device_id,)).fetchone()
+    assert device is not None
+    assert device["device_name"] == "Le 3e lumestrio"
+    assert device["device_type"] == "lumestrio"
+    assert bool(device["handles_audio"]) is True
+    assert bool(device["handles_dmx"]) is False
+    assert device["audiofile"] == "song.mp3"
+    assert device["config_version"] == 7
+    assert device["synced_version"] == 7
+    assert bool(device["active"]) is False  # never set from payload -- state, not config
+    assert bool(device["is_master"]) is False
+
+    group = conn.execute(
+        "SELECT * FROM groups WHERE uuid = ?", (device["group_id"],)
+    ).fetchone()
+    assert group["label"] == "Jardin"
+
+    calendar = conn.execute(
+        "SELECT * FROM calendars WHERE uuid = ?", (group["calendar_id"],)
+    ).fetchone()
+    assert calendar["label"] == "Été"
+    assert json.loads(calendar["weekdays"]) == [6, 7]
+
+    presets = conn.execute(
+        "SELECT * FROM ignition_presets WHERE calendar_id = ?", (calendar["uuid"],)
+    ).fetchall()
+    assert len(presets) == 1
+    assert presets[0]["name"] == "Soirée"
+
+
+def test_apply_pushed_config_without_group_or_calendar(db_path: str) -> None:
+    conn = db.connect(db_path)
+
+    device_id = db.apply_pushed_config(
+        conn,
+        device_type="lumestrio",
+        device_number=5,
+        payload=_config_payload(group=None, calendar=None),
+    )
+
+    device = conn.execute("SELECT * FROM devices WHERE device_id = ?", (device_id,)).fetchone()
+    assert device["group_id"] is None
+    assert conn.execute("SELECT COUNT(*) AS n FROM groups").fetchone()["n"] == 0
+    assert conn.execute("SELECT COUNT(*) AS n FROM calendars").fetchone()["n"] == 0
+
+
+def test_apply_pushed_config_second_call_updates_existing_device_row(db_path: str) -> None:
+    conn = db.connect(db_path)
+    db.apply_pushed_config(
+        conn, device_type="lumestrio", device_number=3, payload=_config_payload()
+    )
+
+    db.apply_pushed_config(
+        conn,
+        device_type="lumestrio",
+        device_number=3,
+        payload=_config_payload(config_version=8, device_name="Renamed"),
+    )
+
+    rows = conn.execute("SELECT * FROM devices WHERE device_id = 'lumestrio3'").fetchall()
+    assert len(rows) == 1  # updated in place, not duplicated
+    assert rows[0]["device_name"] == "Renamed"
+    assert rows[0]["config_version"] == 8
+
+
+def test_apply_pushed_config_wipes_and_replaces_old_calendar_data(db_path: str) -> None:
+    conn = db.connect(db_path)
+    db.apply_pushed_config(
+        conn, device_type="lumestrio", device_number=3, payload=_config_payload()
+    )
+
+    db.apply_pushed_config(
+        conn,
+        device_type="lumestrio",
+        device_number=3,
+        payload=_config_payload(
+            config_version=8,
+            group="Autre groupe",
+            calendar={
+                "label": "Hiver",
+                "weekdays": [1],
+                "ignition_presets": [],
+            },
+        ),
+    )
+
+    assert conn.execute("SELECT COUNT(*) AS n FROM groups").fetchone()["n"] == 1
+    assert conn.execute("SELECT COUNT(*) AS n FROM calendars").fetchone()["n"] == 1
+    assert conn.execute("SELECT COUNT(*) AS n FROM ignition_presets").fetchone()["n"] == 0
+    group = conn.execute("SELECT * FROM groups").fetchone()
+    assert group["label"] == "Autre groupe"
+    calendar = conn.execute("SELECT * FROM calendars").fetchone()
+    assert calendar["label"] == "Hiver"
+
+
+def test_apply_pushed_config_preserves_active_state_on_update(db_path: str) -> None:
+    conn = db.connect(db_path)
+    db.apply_pushed_config(
+        conn, device_type="lumestrio", device_number=3, payload=_config_payload()
+    )
+    conn.execute("UPDATE devices SET active = 1 WHERE device_id = 'lumestrio3'")
+    conn.commit()
+
+    db.apply_pushed_config(
+        conn,
+        device_type="lumestrio",
+        device_number=3,
+        payload=_config_payload(config_version=9),
+    )
+
+    row = conn.execute("SELECT active FROM devices WHERE device_id = 'lumestrio3'").fetchone()
+    assert bool(row["active"]) is True  # untouched by the config push

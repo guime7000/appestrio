@@ -164,3 +164,12 @@ class PendingSyncPublic(SQLModel):
 
 class DeviceBulkDeleteRequest(SQLModel):
     device_ids: list[str] = Field(min_length=1)
+
+
+class ActivateRequest(SQLModel):
+    """Body for `POST /devices/{device_id}/activate` -- the reverse
+    channel `lora-daemon` calls when an ACTIVATE frame addressed to this
+    device arrives, so `apply_active_state` can run (item 8 step 3).
+    """
+
+    active: bool

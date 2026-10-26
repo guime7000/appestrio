@@ -7,6 +7,7 @@ from lora_daemon import db, hexconf, orchestration
 from lora_daemon.devices import LoraDeviceType, build_address
 from lora_daemon.messages import (
     FILE_MSG_START,
+    FileMsgStart,
     MessageType,
     PingType,
     decode_activate,
@@ -262,13 +263,16 @@ async def test_sync_device_config_relaystrio_happy_path(db_path: str) -> None:
     for frame in listener.receive_all():
         if not frame or frame[0] != int(MessageType.FILE_MSG):
             continue
-        if frame[1] == FILE_MSG_START:
-            start = decode_file_msg_start_versioned(frame)
-            assert start.targets == ((RELAYSTRIO_1_ADDRESS, 3),)
-            num_parts = start.num_parts
+        decoded = decode_file_msg(frame)
+        if isinstance(decoded, FileMsgStart):
+            # Plain shape, not the versioned one -- relaystrio firmware
+            # reads its target list one raw byte at a time
+            # (LoraApp.h's `while (LoraPhy.readNext(uuid))`) and has no
+            # config_version concept at all.
+            assert decoded.addresses == (RELAYSTRIO_1_ADDRESS,)
+            num_parts = decoded.num_parts
         else:
-            chunk = decode_file_msg(frame)
-            chunks[chunk.index] = chunk.data
+            chunks[decoded.index] = decoded.data
     assert num_parts == len(chunks)
     body = b"".join(chunks[i] for i in range(num_parts))
     # No calendar assigned (no group_id) -- the real relaystrio Agenda

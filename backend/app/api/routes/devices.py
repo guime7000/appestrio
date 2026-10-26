@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from app import crud
 from app.api.deps import SessionDep
 from app.models import (
+    ActivateRequest,
     Device,
     DeviceBulkDeleteRequest,
     DeviceCreate,
@@ -18,6 +19,7 @@ from app.models import (
     Message,
     PendingSyncPublic,
 )
+from app.services.activation import apply_active_state
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -92,6 +94,25 @@ def update_device(
         session.rollback()
         raise HTTPException(status_code=409, detail=_conflict_detail(exc))
     return crud.device_to_public(device)
+
+
+@router.post("/{device_id}/activate", response_model=Message)
+def activate_device(session: SessionDep, device_id: str, payload: ActivateRequest) -> Message:
+    """Called by this device's own `lora-daemon` when an ACTIVATE frame
+    addressed to it arrives (item 8 step 3) -- not by the frontend.
+    `lora-daemon` already reconciled its own local `devices.active` row
+    directly (db.reconcile_device_active, same shared sqlite file); this
+    route is purely the trigger for the physical side effect.
+    """
+    device = _get_device_or_404(session, device_id)
+    apply_active_state(
+        device_id=device.device_id,
+        active=payload.active,
+        handles_audio=device.handles_audio,
+        handles_dmx=device.handles_dmx,
+        audiofile=device.audiofile,
+    )
+    return Message(message=f"activation applied for {device_id}")
 
 
 @router.delete("/", response_model=Message)

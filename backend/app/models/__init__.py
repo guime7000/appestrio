@@ -13,6 +13,7 @@ from app.models.common import BulkDeleteRequest, Message, WhoAmI, utcnow
 from app.models.devices import (
     LORA_TYPE_INDEX,
     MAX_DEVICES_PER_TYPE,
+    ActivateRequest,
     Device,
     DeviceBase,
     DeviceBulkDeleteRequest,
@@ -80,6 +81,7 @@ __all__ = [
     "CalendarsPublic",
     "CalendarSummaryPublic",
     "CalendarUpdate",
+    "ActivateRequest",
     "Device",
     "DeviceBase",
     "DeviceBulkDeleteRequest",

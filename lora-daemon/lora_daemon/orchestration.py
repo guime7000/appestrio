@@ -257,9 +257,20 @@ async def sync_device_config(
 
     scheduler.pause()
     try:
-        start = messages.encode_file_msg_start_versioned(
-            len(chunks), [(address, config.config_version)]
-        )
+        if config.device_type == "lumestrio":
+            # relaystrio firmware has no config_version concept and
+            # reads its FILE_MSG start frame's target list one plain
+            # byte at a time (LoraApp.h's processFileLoraMsg: `while
+            # (LoraPhy.readNext(uuid))`) -- sending it this 3-bytes-
+            # per-target shape would corrupt its target list, not just
+            # be ignored. Only safe to use for lumestrio, both ends of
+            # which are new code with no legacy wire-compatibility
+            # constraint.
+            start = messages.encode_file_msg_start_versioned(
+                len(chunks), [(address, config.config_version)]
+            )
+        else:
+            start = messages.encode_file_msg_start(len(chunks), [address])
         transport.send(start)
         for index, chunk in enumerate(chunks):
             await asyncio.sleep(chunk_delay_s)

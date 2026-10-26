@@ -19,7 +19,13 @@ import socket
 import sqlite3
 
 from . import control_api, db, orchestration
-from .devices import device_id_for_identity, parse_device_identity_from_hostname
+from .devices import (
+    LoraDeviceType,
+    build_address,
+    device_id_for_identity,
+    parse_device_identity_from_hostname,
+)
+from .endpoint import EndpointResponder
 from .scheduler import PingScheduler
 from .transport import DEFAULT_E32_SOCKET_PATH, LoraSocketTransport
 
@@ -50,6 +56,7 @@ async def run_daemon(
     control_host: str = control_api.DEFAULT_HOST,
     control_port: int = control_api.DEFAULT_PORT,
     agenda_sync_interval_s: float = orchestration.DEFAULT_AGENDA_SYNC_INTERVAL_S,
+    own_identity: tuple[LoraDeviceType, int] | None = None,
 ) -> None:
     """The actual run loop: starts the ping scheduler, clock sync, the
     automatic config-push loop, and the control API, then blocks until
@@ -59,10 +66,32 @@ async def run_daemon(
     production. All of these share this one `PingScheduler` instance --
     that's the entire point of running them in-process together rather
     than as separate services.
+
+    `own_identity` (item 8 steps 1-3) wires an EndpointResponder into
+    `scheduler`'s `on_other_frame` hook -- only when this process's own
+    hostname actually resolved to a (device_type, device_number), e.g. a
+    master whose own hostname isn't a lumestrio endpoint simply never
+    gets one, the same non-fatal spirit as _resolve_own_identity itself.
+    Deliberately *not* its own asyncio task: PingScheduler is already the
+    sole poller of the shared transport (see endpoint.py's module
+    docstring for why a second independent poller would race it for
+    every incoming frame), so the responder is purely reactive, invoked
+    from inside PingScheduler's own poll.
     """
     scheduler = PingScheduler(conn=conn, transport=transport)
     if stop is None:
         stop = asyncio.Event()
+
+    if own_identity is not None:
+        own_device_type, own_device_number = own_identity
+        responder = EndpointResponder(
+            conn=conn,
+            transport=transport,
+            own_address=build_address(own_device_number, own_device_type),
+            own_device_type=own_device_type.name.lower(),
+            own_device_number=own_device_number,
+        )
+        scheduler.on_other_frame = responder.handle_frame
 
     tasks = [
         asyncio.create_task(scheduler.run_forever()),
@@ -91,33 +120,34 @@ async def run_daemon(
                 await task
 
 
-def _log_own_identity() -> None:
-    """Self-identification step (item 8, step 1): derives this process's
-    own (device_type, device_number) from its OS hostname and logs it.
-    Purely informational for now -- nothing is written to the DB yet
-    (that's the self-provisioning piece, step 2) -- so this is always
-    non-fatal: a master Pi's own hostname has no reason to match the
+def _resolve_own_identity() -> tuple[LoraDeviceType, int] | None:
+    """Self-identification (item 8 step 1): derives this process's own
+    (device_type, device_number) from its OS hostname, for both logging
+    and (since step 2/3) actually starting an EndpointResponder. Always
+    non-fatal -- a master Pi's own hostname has no reason to match the
     <device_type><number> convention at all (it isn't a lumestrio
-    endpoint), and this daemon has run against real relaystrio hardware
-    perfectly well without this ever existing.
+    endpoint), and this daemon ran against real relaystrio hardware
+    perfectly well before this existed.
     """
     hostname = os.environ.get("LORA_HOSTNAME") or socket.gethostname()
     try:
-        device_type, device_number = parse_device_identity_from_hostname(hostname)
+        identity = parse_device_identity_from_hostname(hostname)
     except ValueError:
         logger.info(
             "own hostname %r doesn't match <device_type><number> -- "
             "not a lumestrio endpoint, or self-identification not applicable here",
             hostname,
         )
-        return
+        return None
+    device_type, device_number = identity
     device_id = device_id_for_identity(device_type, device_number)
     logger.info("own identity: hostname=%r -> device_id=%s", hostname, device_id)
+    return identity
 
 
 async def main() -> None:
     _setup_logging()
-    _log_own_identity()
+    own_identity = _resolve_own_identity()
 
     db_path = _required_env("LORA_DB_PATH")
     client_socket_path = os.environ.get("LORA_CLIENT_SOCKET_PATH", DEFAULT_CLIENT_SOCKET_PATH)
@@ -144,6 +174,7 @@ async def main() -> None:
             stop=stop,
             control_host=control_host,
             control_port=control_port,
+            own_identity=own_identity,
         )
     finally:
         transport.close()

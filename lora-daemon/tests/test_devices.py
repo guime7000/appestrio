@@ -5,6 +5,8 @@ from lora_daemon.devices import (
     address_for_device_id,
     build_address,
     describe_address,
+    device_id_for_identity,
+    parse_device_identity_from_hostname,
 )
 
 
@@ -69,3 +71,41 @@ def test_address_for_device_id_rejects_prefix_mismatch() -> None:
 def test_address_for_device_id_rejects_non_numeric_suffix() -> None:
     with pytest.raises(ValueError, match="no numeric suffix"):
         address_for_device_id("lumestrio-master", "lumestrio")
+
+
+def test_device_id_for_identity_lumestrio() -> None:
+    assert device_id_for_identity(LoraDeviceType.LUMESTRIO, 3) == "lumestrio3"
+
+
+def test_device_id_for_identity_relaystrio() -> None:
+    assert device_id_for_identity(LoraDeviceType.RELAYSTRIO, 7) == "relaystrio7"
+
+
+def test_parse_device_identity_from_hostname_lumestrio() -> None:
+    assert parse_device_identity_from_hostname("lumestrio3") == (LoraDeviceType.LUMESTRIO, 3)
+
+
+def test_parse_device_identity_from_hostname_relaystrio() -> None:
+    assert parse_device_identity_from_hostname("relaystrio7") == (LoraDeviceType.RELAYSTRIO, 7)
+
+
+def test_parse_device_identity_from_hostname_strips_domain_suffix() -> None:
+    assert parse_device_identity_from_hostname("lumestrio3.local") == (
+        LoraDeviceType.LUMESTRIO,
+        3,
+    )
+
+
+def test_parse_device_identity_from_hostname_rejects_unknown_prefix() -> None:
+    with pytest.raises(ValueError, match="doesn't match the"):
+        parse_device_identity_from_hostname("raspberrypi")
+
+
+def test_parse_device_identity_from_hostname_rejects_non_numeric_suffix() -> None:
+    with pytest.raises(ValueError, match="doesn't match the"):
+        parse_device_identity_from_hostname("lumestrio-master")
+
+
+def test_parse_device_identity_from_hostname_round_trips_with_device_id_for_identity() -> None:
+    device_type, device_number = parse_device_identity_from_hostname("lumestrio12")
+    assert device_id_for_identity(device_type, device_number) == "lumestrio12"

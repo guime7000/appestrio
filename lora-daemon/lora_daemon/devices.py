@@ -48,3 +48,50 @@ def address_for_device_id(device_id: str, device_type: str) -> int:
         raise ValueError(f"device_id {device_id!r} has no numeric suffix after {device_type!r}")
     lora_type = LoraDeviceType[device_type.upper()]
     return build_address(int(number_part), lora_type)
+
+
+def device_id_for_identity(device_type: LoraDeviceType, device_number: int) -> str:
+    """Inverse of parse_device_identity_from_hostname -- reconstructs the
+    device_id string (e.g. "lumestrio3") backend's own DeviceCreate
+    contract expects, from a parsed (type, number) pair.
+    """
+    return f"{device_type.name.lower()}{device_number}"
+
+
+def parse_device_identity_from_hostname(hostname: str) -> tuple[LoraDeviceType, int]:
+    """Self-identification for a lumestrio endpoint: derives this
+    device's own (device_type, device_number) from its OS hostname --
+    there's no local setup step at all (every other config field comes
+    from master via LoRa, see Lora_Rewrite_Plan.md item 8's provisioning-
+    model note), so a fresh device needs to know its own identity from
+    something outside the app entirely before it's ever heard from
+    master -- it needs its own address just to recognize which LoRa
+    messages target it. Mirrors legacy's own sys.getHostName() pattern:
+    the hostname itself IS the device_id (e.g. "lumestrio3"), set once at
+    image/flash time (OS/hardware provisioning, not an app-level step --
+    and also what avahi/mDNS already advertises).
+
+    A hostname that includes a domain suffix (e.g. "lumestrio3.local")
+    is handled by only looking at the part before the first ".",
+    defensively -- `socket.gethostname()` normally returns the short
+    name alone on Linux, but this shouldn't silently misparse if it ever
+    doesn't.
+
+    In practice this only ever runs for `lumestrio` -- `relaystrio` is
+    frozen ESP32 firmware, not this Python process -- but both prefixes
+    are recognized here for symmetry with every other address-parsing
+    helper in this module, and so a misconfigured hostname on a
+    `relaystrio`-named Pi (which should never exist) fails loudly rather
+    than silently.
+    """
+    short_hostname = hostname.split(".", 1)[0]
+    for device_type in LoraDeviceType:
+        prefix = device_type.name.lower()
+        if short_hostname.startswith(prefix):
+            suffix = short_hostname[len(prefix) :]
+            if suffix.isdigit():
+                return device_type, int(suffix)
+    raise ValueError(
+        f"hostname {hostname!r} doesn't match the <device_type><number> convention "
+        f"(expected one of: {', '.join(t.name.lower() for t in LoraDeviceType)})"
+    )

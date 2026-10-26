@@ -23,19 +23,24 @@ CREATE TABLE devices (
     synced_version INTEGER NOT NULL DEFAULT 0,
     last_seen TEXT,
     last_roundtrip_ms INTEGER,
+    created_at TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL
 );
 
 CREATE TABLE groups (
     uuid TEXT PRIMARY KEY,
     label TEXT NOT NULL,
-    calendar_id TEXT
+    calendar_id TEXT,
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE calendars (
     uuid TEXT PRIMARY KEY,
     label TEXT NOT NULL,
-    weekdays TEXT NOT NULL
+    weekdays TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE ignition_presets (
@@ -46,7 +51,9 @@ CREATE TABLE ignition_presets (
     start_date TEXT NOT NULL,
     stop_date TEXT NOT NULL,
     start_time TEXT NOT NULL,
-    stop_time TEXT NOT NULL
+    stop_time TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
 );
 
 -- Singleton row (id=1), mirroring the default row backend's own

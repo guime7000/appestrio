@@ -24,12 +24,13 @@ for whatever it doesn't already consume as a PONG -- PingScheduler stays
 the sole poller.
 """
 
+import asyncio
 import json
 import logging
 import sqlite3
 from dataclasses import dataclass, field
 
-from . import db, messages
+from . import backend_client, db, messages
 from .messages import MessageType, PingType
 
 logger = logging.getLogger(__name__)
@@ -75,12 +76,14 @@ class EndpointResponder:
         own_address: int,
         own_device_type: str,
         own_device_number: int,
+        backend_url: str = backend_client.DEFAULT_BACKEND_URL,
     ) -> None:
         self._conn = conn
         self._transport = transport
         self.own_address = own_address
         self._own_device_type = own_device_type
         self._own_device_number = own_device_number
+        self._backend_url = backend_url
         self._transfer: _IncomingTransfer | None = None
         self.agenda_disabled = False
 
@@ -166,14 +169,34 @@ class EndpointResponder:
         activate = messages.decode_activate(buf)
         if not activate.targets(self.own_address):
             return
-        # Step 3 (not built yet): call backend's apply_active_state for
-        # real. Logged for now so the dispatch path is observable and
-        # testable ahead of that wiring -- same placeholder spirit as
-        # apply_active_state itself (Docs/To_Be_Done.md item 7).
         logger.info(
-            "ACTIVATE received for %s: active=%s (apply_active_state wiring: item 8 step 3, not built yet)",
+            "ACTIVATE received for %s: active=%s",
             self._own_device_id(),
             activate.active,
+        )
+        # Write our own `active` state directly -- same shared sqlite
+        # file and same function master's own scheduler already uses to
+        # reconcile a *target's* active bit from a real PONG
+        # (scheduler.py's reconcile_device_active); here it's just our
+        # own device_id instead of some other address. Done unconditionally
+        # and before the backend notification below so the next PONG we
+        # send reports the right state even if backend is unreachable.
+        db.reconcile_device_active(self._conn, self._own_device_id(), activate.active)
+        # The physical effect (OSC/mpv/relay -- apply_active_state) lives
+        # in `backend`, not here (Docs/To_Be_Done.md item 7's design), so
+        # it has to be told over HTTP. Best-effort, fire-and-forget: only
+        # scheduled when there's a running event loop to schedule it on
+        # (there always is in the real daemon -- see daemon.py's
+        # run_daemon -- but not in a synchronous unit test calling
+        # handle_frame directly, which this must not require).
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        loop.create_task(
+            backend_client.notify_activate(
+                self._own_device_id(), activate.active, backend_url=self._backend_url
+            )
         )
 
     # -- DISABLE_AGENDA ----------------------------------------------------

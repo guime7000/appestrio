@@ -2,9 +2,9 @@ import asyncio
 
 import pytest
 
-from lora_daemon import daemon, db
+from lora_daemon import backend_client, daemon, db
 from lora_daemon.devices import LoraDeviceType, build_address
-from lora_daemon.messages import PingType, decode_pong, encode_ping
+from lora_daemon.messages import PingType, decode_pong, encode_activate, encode_ping
 from lora_daemon.transport import LoopbackBus, LoopbackTransport
 
 
@@ -113,6 +113,42 @@ async def test_run_daemon_starts_endpoint_responder_when_own_identity_given(
         await asyncio.sleep(0.2)
         [frame] = listener.receive_all()
         assert decode_pong(frame).address == own_address
+    finally:
+        stop.set()
+        await asyncio.wait_for(task, timeout=1.0)
+
+
+async def test_run_daemon_wires_backend_url_into_activate_notification(
+    db_path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = []
+
+    async def fake_notify(device_id: str, active: bool, *, backend_url: str) -> None:
+        calls.append((device_id, active, backend_url))
+
+    monkeypatch.setattr(backend_client, "notify_activate", fake_notify)
+
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    listener = LoopbackTransport(bus)
+    stop = asyncio.Event()
+
+    task = asyncio.create_task(
+        daemon.run_daemon(
+            conn=conn,
+            transport=transport,
+            stop=stop,
+            control_port=0,
+            own_identity=(LoraDeviceType.LUMESTRIO, 3),
+            backend_url="http://example:1234",
+        )
+    )
+    try:
+        own_address = build_address(3, LoraDeviceType.LUMESTRIO)
+        listener.send(encode_activate(True, [own_address]))
+        await asyncio.sleep(0.2)
+        assert calls == [("lumestrio3", True, "http://example:1234")]
     finally:
         stop.set()
         await asyncio.wait_for(task, timeout=1.0)

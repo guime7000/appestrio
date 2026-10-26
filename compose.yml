@@ -34,6 +34,12 @@ services:
       # lora-daemon:8765 -- 127.0.0.1 (the code default) would only
       # accept connections from inside this same container.
       - LORA_CONTROL_HOST=0.0.0.0
+      # Reverse channel (item 8 step 3): lora-daemon calls this device's
+      # own `backend` container over the compose network when an
+      # ACTIVATE frame arrives for our own address, so apply_active_state
+      # can run. Default (backend_client.DEFAULT_BACKEND_URL) already
+      # matches this value; set explicitly here for discoverability.
+      - BACKEND_URL=http://backend:8000
     volumes:
       - app-db-data:/app/data
       # e32.service (the host-level LoRa/UART driver, see

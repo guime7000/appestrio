@@ -18,7 +18,7 @@ import signal
 import socket
 import sqlite3
 
-from . import control_api, db, orchestration
+from . import backend_client, control_api, db, orchestration
 from .devices import (
     LoraDeviceType,
     build_address,
@@ -57,6 +57,7 @@ async def run_daemon(
     control_port: int = control_api.DEFAULT_PORT,
     agenda_sync_interval_s: float = orchestration.DEFAULT_AGENDA_SYNC_INTERVAL_S,
     own_identity: tuple[LoraDeviceType, int] | None = None,
+    backend_url: str = backend_client.DEFAULT_BACKEND_URL,
 ) -> None:
     """The actual run loop: starts the ping scheduler, clock sync, the
     automatic config-push loop, and the control API, then blocks until
@@ -90,6 +91,7 @@ async def run_daemon(
             own_address=build_address(own_device_number, own_device_type),
             own_device_type=own_device_type.name.lower(),
             own_device_number=own_device_number,
+            backend_url=backend_url,
         )
         scheduler.on_other_frame = responder.handle_frame
 
@@ -154,6 +156,7 @@ async def main() -> None:
     e32_socket_path = os.environ.get("LORA_E32_SOCKET_PATH", DEFAULT_E32_SOCKET_PATH)
     control_host = os.environ.get("LORA_CONTROL_HOST", control_api.DEFAULT_HOST)
     control_port = int(os.environ.get("LORA_CONTROL_PORT", control_api.DEFAULT_PORT))
+    backend_url = os.environ.get("BACKEND_URL", backend_client.DEFAULT_BACKEND_URL)
 
     conn = db.connect(db_path)
     transport = LoraSocketTransport(
@@ -175,6 +178,7 @@ async def main() -> None:
             control_host=control_host,
             control_port=control_port,
             own_identity=own_identity,
+            backend_url=backend_url,
         )
     finally:
         transport.close()

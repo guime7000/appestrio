@@ -1,8 +1,9 @@
+import asyncio
 import json
 
 import pytest
 
-from lora_daemon import db
+from lora_daemon import backend_client, db
 from lora_daemon.devices import LoraDeviceType, build_address
 from lora_daemon.endpoint import EndpointResponder
 from lora_daemon.messages import (
@@ -48,14 +49,21 @@ def _insert_device(conn, **overrides) -> None:
     conn.commit()
 
 
-def _responder(conn, transport) -> EndpointResponder:
-    return EndpointResponder(
-        conn=conn,
-        transport=transport,
-        own_address=LUMESTRIO_3_ADDRESS,
-        own_device_type="lumestrio",
-        own_device_number=3,
-    )
+def _responder(conn, transport, **overrides) -> EndpointResponder:
+    kwargs = {
+        "conn": conn,
+        "transport": transport,
+        "own_address": LUMESTRIO_3_ADDRESS,
+        "own_device_type": "lumestrio",
+        "own_device_number": 3,
+    }
+    kwargs.update(overrides)
+    return EndpointResponder(**kwargs)
+
+
+def _read_active(conn) -> int:
+    row = conn.execute("SELECT active FROM devices WHERE device_id = ?", ("lumestrio3",)).fetchone()
+    return row["active"]
 
 
 def _deliver(transport: LoopbackTransport, responder: EndpointResponder) -> None:
@@ -218,6 +226,71 @@ def test_activate_not_targeting_us_is_ignored(
         _deliver(transport, responder)
 
     assert "ACTIVATE received" not in caplog.text
+
+
+def test_activate_targeting_us_writes_own_active_state(db_path: str) -> None:
+    conn = db.connect(db_path)
+    _insert_device(conn, active=0)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    peer = LoopbackTransport(bus)
+    responder = _responder(conn, transport)
+    assert _read_active(conn) == 0
+
+    peer.send(encode_activate(True, [LUMESTRIO_3_ADDRESS]))
+    _deliver(transport, responder)
+
+    assert _read_active(conn) == 1
+
+
+def test_activate_not_targeting_us_leaves_active_state_unchanged(db_path: str) -> None:
+    conn = db.connect(db_path)
+    _insert_device(conn, active=0)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    peer = LoopbackTransport(bus)
+    responder = _responder(conn, transport)
+
+    peer.send(encode_activate(True, [OTHER_ADDRESS]))
+    _deliver(transport, responder)
+
+    assert _read_active(conn) == 0
+
+
+async def test_activate_targeting_us_notifies_backend(
+    db_path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = []
+
+    async def fake_notify(device_id: str, active: bool, *, backend_url: str) -> None:
+        calls.append((device_id, active, backend_url))
+
+    monkeypatch.setattr(backend_client, "notify_activate", fake_notify)
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    peer = LoopbackTransport(bus)
+    responder = _responder(conn, transport, backend_url="http://example:1234")
+
+    peer.send(encode_activate(True, [LUMESTRIO_3_ADDRESS]))
+    _deliver(transport, responder)
+    await asyncio.sleep(0)  # let the fire-and-forget task run
+
+    assert calls == [("lumestrio3", True, "http://example:1234")]
+
+
+def test_activate_without_running_event_loop_does_not_raise(db_path: str) -> None:
+    # Sync unit tests (like every other test in this file) call
+    # handle_frame with no event loop running -- must stay a no-op for
+    # the backend notification, not raise RuntimeError.
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    peer = LoopbackTransport(bus)
+    responder = _responder(conn, transport)
+
+    peer.send(encode_activate(True, [LUMESTRIO_3_ADDRESS]))
+    _deliver(transport, responder)  # must not raise
 
 
 def test_disable_agenda_sets_flag(db_path: str) -> None:

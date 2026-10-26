@@ -23,6 +23,24 @@ def test_required_env_returns_value(monkeypatch: pytest.MonkeyPatch) -> None:
     assert daemon._required_env("LORA_DB_PATH") == "/tmp/appestrio.db"
 
 
+def test_log_own_identity_recognizes_lumestrio_hostname(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setenv("LORA_HOSTNAME", "lumestrio3")
+    with caplog.at_level("INFO"):
+        daemon._log_own_identity()
+    assert "device_id=lumestrio3" in caplog.text
+
+
+def test_log_own_identity_is_non_fatal_for_unrecognized_hostname(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setenv("LORA_HOSTNAME", "raspberrypi")
+    with caplog.at_level("INFO"):
+        daemon._log_own_identity()  # must not raise
+    assert "not a lumestrio endpoint" in caplog.text
+
+
 async def test_run_daemon_starts_scheduler_and_stops_cleanly(db_path: str) -> None:
     conn = db.connect(db_path)
     bus = LoopbackBus()

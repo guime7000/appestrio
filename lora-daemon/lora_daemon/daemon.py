@@ -15,9 +15,11 @@ import contextlib
 import logging
 import os
 import signal
+import socket
 import sqlite3
 
 from . import control_api, db, orchestration
+from .devices import device_id_for_identity, parse_device_identity_from_hostname
 from .scheduler import PingScheduler
 from .transport import DEFAULT_E32_SOCKET_PATH, LoraSocketTransport
 
@@ -89,8 +91,33 @@ async def run_daemon(
                 await task
 
 
+def _log_own_identity() -> None:
+    """Self-identification step (item 8, step 1): derives this process's
+    own (device_type, device_number) from its OS hostname and logs it.
+    Purely informational for now -- nothing is written to the DB yet
+    (that's the self-provisioning piece, step 2) -- so this is always
+    non-fatal: a master Pi's own hostname has no reason to match the
+    <device_type><number> convention at all (it isn't a lumestrio
+    endpoint), and this daemon has run against real relaystrio hardware
+    perfectly well without this ever existing.
+    """
+    hostname = os.environ.get("LORA_HOSTNAME") or socket.gethostname()
+    try:
+        device_type, device_number = parse_device_identity_from_hostname(hostname)
+    except ValueError:
+        logger.info(
+            "own hostname %r doesn't match <device_type><number> -- "
+            "not a lumestrio endpoint, or self-identification not applicable here",
+            hostname,
+        )
+        return
+    device_id = device_id_for_identity(device_type, device_number)
+    logger.info("own identity: hostname=%r -> device_id=%s", hostname, device_id)
+
+
 async def main() -> None:
     _setup_logging()
+    _log_own_identity()
 
     db_path = _required_env("LORA_DB_PATH")
     client_socket_path = os.environ.get("LORA_CLIENT_SOCKET_PATH", DEFAULT_CLIENT_SOCKET_PATH)

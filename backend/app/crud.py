@@ -576,7 +576,14 @@ def update_device(
     update_data = device_in.model_dump(exclude_unset=True)
     db_device.sqlmodel_update(update_data)
     db_device.updated_at = utcnow()
-    if update_data:
+    # `active` is state, not config (same rule `lora-daemon`'s own
+    # db.reconcile_device_active enforces on its direct-SQL writes to
+    # this column) -- a PATCH that only flips `active` must not mark
+    # this device "pending sync" for a config push it doesn't actually
+    # need. Any *other* field changing still bumps as before, including
+    # when it's changed alongside `active` in the same request.
+    config_fields_changed = update_data.keys() - {"active"}
+    if config_fields_changed:
         bump_device_config_version(session=session, device=db_device)
     session.add(db_device)
     session.commit()

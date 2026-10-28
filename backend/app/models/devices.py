@@ -99,6 +99,19 @@ class Device(DeviceBase, table=True):
     group: Optional["Group"] = Relationship(back_populates="devices")  # noqa: UP037, UP045
 
 
+def address_for_device(device: Device) -> int:
+    """Derives this device's own LoRa address from its `device_id` --
+    the exact inverse of how `device_id` was constructed in the first
+    place (`device_type` + `device_number`, see `DeviceCreate`'s own
+    comment), mirroring `lora-daemon`'s `devices.build_address`. Needed
+    to actually command a device over LoRa (e.g. `send_activate`) from
+    `backend`, which otherwise only ever deals in `device_id` strings.
+    """
+    prefix = device.device_type.value
+    device_number = int(device.device_id.removeprefix(prefix))
+    return device_number + MAX_DEVICES_PER_TYPE * LORA_TYPE_INDEX[device.device_type]
+
+
 class DeviceCreate(DeviceBase):
     group_id: UUID | None = None
     # device_id is derived server-side from device_type + device_number

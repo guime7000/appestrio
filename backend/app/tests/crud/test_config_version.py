@@ -244,6 +244,37 @@ def test_mark_device_synced_reappears_pending_after_new_bump(session: Session) -
     device = crud.create_device(session=session, device_create=DeviceCreate(**device_payload()))
     crud.mark_device_synced(session=session, device=device, version=device.config_version)
 
-    crud.update_device(session=session, db_device=device, device_in=DeviceUpdate(active=False))
+    crud.update_device(
+        session=session, db_device=device, device_in=DeviceUpdate(device_name="renamed")
+    )
 
     assert device in crud.get_devices_pending_sync(session=session)
+
+
+def test_update_device_active_only_does_not_bump_config_version(session: Session) -> None:
+    # `active` is state, not config -- flipping it alone must not mark
+    # the device "pending sync" for a config push it doesn't need.
+    device = crud.create_device(session=session, device_create=DeviceCreate(**device_payload()))
+    original_version = device.config_version
+
+    updated = crud.update_device(
+        session=session, db_device=device, device_in=DeviceUpdate(active=False)
+    )
+
+    assert updated.active is False
+    assert updated.config_version == original_version
+
+
+def test_update_device_active_alongside_config_field_still_bumps(session: Session) -> None:
+    device = crud.create_device(session=session, device_create=DeviceCreate(**device_payload()))
+    original_version = device.config_version
+
+    updated = crud.update_device(
+        session=session,
+        db_device=device,
+        device_in=DeviceUpdate(active=False, device_name="renamed"),
+    )
+
+    assert updated.active is False
+    assert updated.device_name == "renamed"
+    assert updated.config_version == original_version + 1

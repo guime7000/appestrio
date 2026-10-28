@@ -4,6 +4,7 @@ const tabs = [
   { to: { name: "configuration-groups" }, label: "Groupes" },
   { to: { name: "configuration-calendars" }, label: "Calendriers" },
   { to: { name: "configuration-clocks" }, label: "Horloges" },
+  { to: { name: "configuration-lora-settings" }, label: "Réglages LoRa" },
 ];
 </script>
 

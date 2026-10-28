@@ -152,3 +152,24 @@ export interface PendingSyncStatus {
   count: number;
   device_ids: string[];
 }
+
+export interface LoraSettingsPublic {
+  is_active: boolean;
+  channel: number;
+  speed: number;
+  fec: boolean;
+  ping_interval_s: number;
+  clock_interval_s: number;
+  relaystrio_recurring_threshold_days: number;
+  updated_at: string;
+}
+
+export interface LoraSettingsUpdate {
+  is_active?: boolean;
+  channel?: number;
+  speed?: number;
+  fec?: boolean;
+  ping_interval_s?: number;
+  clock_interval_s?: number;
+  relaystrio_recurring_threshold_days?: number;
+}

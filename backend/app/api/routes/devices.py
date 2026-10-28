@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, HTTPException
@@ -18,8 +19,13 @@ from app.models import (
     Group,
     Message,
     PendingSyncPublic,
+    address_for_device,
 )
+from app.services import lora_daemon_client
 from app.services.activation import apply_active_state
+from app.services.lora_daemon_client import LoraDaemonError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -82,17 +88,41 @@ def create_device(session: SessionDep, device_in: DeviceCreate) -> DevicePublic:
     return crud.device_to_public(device)
 
 
+def _trigger_remote_activate(device: Device, *, active: bool) -> None:
+    # Best-effort: the DB write (the admin's actual intent) already
+    # succeeded by the time this is called, and `active` is self-healing
+    # anyway (the next PONG reconciles ground truth) -- so a `lora-daemon`
+    # that's temporarily unreachable shouldn't fail the whole request.
+    try:
+        lora_daemon_client.send_activate(active, addresses=[address_for_device(device)])
+    except LoraDaemonError:
+        logger.warning(
+            "couldn't reach lora-daemon to activate %s (active=%s)", device.device_id, active
+        )
+
+
 @router.patch("/{device_id}", response_model=DevicePublic)
 def update_device(
     session: SessionDep, device_id: str, device_in: DeviceUpdate
 ) -> DevicePublic:
     device = _get_device_or_404(session, device_id)
     _check_group_exists(session, device_in.group_id)
+    active_changed = "active" in device_in.model_fields_set
+
     try:
         device = crud.update_device(session=session, db_device=device, device_in=device_in)
     except IntegrityError as exc:
         session.rollback()
         raise HTTPException(status_code=409, detail=_conflict_detail(exc))
+
+    # Real, immediate ACTIVATE over LoRa, on top of the DB write above
+    # (which `update_device` already keeps "state, not config" --
+    # doesn't bump `config_version` for this). Closes the gap flagged
+    # 2026-10-28: clicking "Éteindre"/"Tout éteindre" updated this
+    # column but never actually commanded the physical device.
+    if active_changed:
+        _trigger_remote_activate(device, active=device.active)
+
     return crud.device_to_public(device)
 
 

@@ -201,6 +201,105 @@ def test_update_device_not_found(client: TestClient) -> None:
     assert response.status_code == 404
 
 
+def test_update_device_active_triggers_remote_activate(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app import crud
+    from app.services import lora_daemon_client
+
+    calls = []
+    monkeypatch.setattr(
+        lora_daemon_client,
+        "send_activate",
+        lambda active, addresses=None, **kwargs: calls.append((active, addresses)),
+    )
+    created = client.post(
+        DEVICES_URL, json=device_payload(device_type="lumestrio", device_number=3)
+    ).json()
+    db_device = crud.get_device_by_device_id(session=session, device_id=created["device_id"])
+    crud.mark_device_synced(session=session, device=db_device, version=db_device.config_version)
+
+    response = client.patch(f"{DEVICES_URL}{created['device_id']}", json={"active": False})
+
+    assert response.status_code == 200
+    assert response.json()["active"] is False
+    # lumestrio address = device_number + 32 * LORA_TYPE_INDEX[lumestrio] (1)
+    assert calls == [(False, [35])]
+    assert created["device_id"] not in client.get(f"{DEVICES_URL}pending-sync").json()[
+        "device_ids"
+    ]
+
+
+def test_update_device_active_does_not_bump_config_version(
+    client: TestClient, session: Session
+) -> None:
+    from app import crud
+
+    created = client.post(DEVICES_URL, json=device_payload()).json()
+    db_device = crud.get_device_by_device_id(session=session, device_id=created["device_id"])
+    crud.mark_device_synced(session=session, device=db_device, version=db_device.config_version)
+
+    client.patch(f"{DEVICES_URL}{created['device_id']}", json={"active": False})
+
+    pending = client.get(f"{DEVICES_URL}pending-sync").json()["device_ids"]
+    assert created["device_id"] not in pending
+
+
+def test_update_device_active_alongside_other_field_bumps_config_version(
+    client: TestClient, session: Session
+) -> None:
+    from app import crud
+
+    created = client.post(DEVICES_URL, json=device_payload()).json()
+    db_device = crud.get_device_by_device_id(session=session, device_id=created["device_id"])
+    crud.mark_device_synced(session=session, device=db_device, version=db_device.config_version)
+
+    response = client.patch(
+        f"{DEVICES_URL}{created['device_id']}",
+        json={"active": False, "audiofile": "new_audio.mp3"},
+    )
+
+    assert response.status_code == 200
+    pending = client.get(f"{DEVICES_URL}pending-sync").json()["device_ids"]
+    assert created["device_id"] in pending
+
+
+def test_update_device_active_survives_unreachable_lora_daemon(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services import lora_daemon_client
+    from app.services.lora_daemon_client import LoraDaemonError
+
+    def _raise(*_args, **_kwargs):
+        raise LoraDaemonError("unreachable")
+
+    monkeypatch.setattr(lora_daemon_client, "send_activate", _raise)
+    created = client.post(DEVICES_URL, json=device_payload()).json()
+
+    response = client.patch(f"{DEVICES_URL}{created['device_id']}", json={"active": False})
+
+    assert response.status_code == 200
+    assert response.json()["active"] is False
+
+
+def test_update_device_without_active_does_not_call_remote_activate(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services import lora_daemon_client
+
+    calls = []
+    monkeypatch.setattr(
+        lora_daemon_client,
+        "send_activate",
+        lambda active, addresses=None, **kwargs: calls.append((active, addresses)),
+    )
+    created = client.post(DEVICES_URL, json=device_payload()).json()
+
+    client.patch(f"{DEVICES_URL}{created['device_id']}", json={"audiofile": "new_audio.mp3"})
+
+    assert calls == []
+
+
 def test_delete_device(client: TestClient) -> None:
     created = client.post(DEVICES_URL, json=device_payload()).json()
 

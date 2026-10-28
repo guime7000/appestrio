@@ -5,7 +5,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 from app import crud
-from app.models import LORA_TYPE_INDEX, DeviceCreate, DeviceType, DeviceUpdate
+from app.models import (
+    LORA_TYPE_INDEX,
+    DeviceCreate,
+    DeviceType,
+    DeviceUpdate,
+    address_for_device,
+)
 from app.tests.utils import create_calendar, create_group, device_payload
 
 
@@ -29,6 +35,22 @@ def test_lora_type_index_matches_legacy_and_burger_convention() -> None:
     # burger's firmware.
     assert LORA_TYPE_INDEX[DeviceType.RELAYSTRIO] == 0
     assert LORA_TYPE_INDEX[DeviceType.LUMESTRIO] == 1
+
+
+def test_address_for_device_lumestrio(session: Session) -> None:
+    device = crud.create_device(
+        session=session,
+        device_create=DeviceCreate(**device_payload(device_type="lumestrio", device_number=3)),
+    )
+    assert address_for_device(device) == 3 + 32 * 1
+
+
+def test_address_for_device_relaystrio(session: Session) -> None:
+    device = crud.create_device(
+        session=session,
+        device_create=DeviceCreate(**device_payload(device_type="relaystrio", device_number=5)),
+    )
+    assert address_for_device(device) == 5 + 32 * 0
 
 
 def test_device_id_is_composed_from_type_and_number(session: Session) -> None:

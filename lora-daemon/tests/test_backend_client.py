@@ -36,6 +36,22 @@ async def test_notify_activate_sends_expected_request() -> None:
     assert json.loads(body) == {"active": True}
 
 
+async def test_notify_agenda_disabled_sends_expected_request() -> None:
+    received: list[bytes] = []
+    server, port = await _run_fake_backend(received)
+    try:
+        await backend_client.notify_agenda_disabled(True, backend_url=f"http://127.0.0.1:{port}")
+    finally:
+        server.close()
+
+    assert len(received) == 1
+    request_text = received[0].decode("ascii")
+    request_line = request_text.partition("\r\n")[0]
+    assert request_line == "POST /api/v1/agenda/disabled HTTP/1.1"
+    body = request_text.rsplit("\r\n\r\n", 1)[1]
+    assert json.loads(body) == {"disabled": True}
+
+
 async def test_notify_activate_does_not_raise_when_backend_unreachable() -> None:
     # Nothing listening on this port -- connection refused.
     await backend_client.notify_activate(

@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -12,6 +14,7 @@ from starlette.middleware.cors import CORSMiddleware
 from app.api.main import api_router
 from app.core.config import settings
 from app.core.db import init_db
+from app.services import agenda_evaluator
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -27,7 +30,14 @@ if settings.SENTRY_DSN and settings.ENVIRONMENT != "local":
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     init_db()
-    yield
+    stop = asyncio.Event()
+    task = asyncio.create_task(agenda_evaluator.run_forever(stop=stop))
+    try:
+        yield
+    finally:
+        stop.set()
+        with contextlib.suppress(asyncio.CancelledError):
+            await asyncio.wait_for(task, timeout=5.0)
 
 
 app = FastAPI(

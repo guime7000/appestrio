@@ -498,6 +498,66 @@ def get_device(*, session: Session, device_uuid: uuid.UUID) -> Device | None:
     return session.get(Device, device_uuid)
 
 
+def get_master_device(*, session: Session) -> Device | None:
+    return session.exec(select(Device).where(Device.is_master == True)).first()  # noqa: E712
+
+
+class MasterDeviceConflictError(Exception):
+    """Raised by ensure_own_master_device when a different device is
+    already flagged is_master=True.
+    """
+
+
+def ensure_own_master_device(
+    *, session: Session, device_type: DeviceType, device_number: int
+) -> Device:
+    """Item 9's devices-row bootstrap: idempotently ensures this physical
+    master Pi has its own `devices` row flagged `is_master=True`, deriving
+    `device_id` from the same hostname-based identity `app.core.identity`
+    resolves. Called once at `backend` startup (`main.py`'s `lifespan`),
+    only when `Settings.IS_MASTER` is true -- safe to call on every
+    restart, since it's a no-op once the row already exists and is
+    already flagged correctly.
+
+    Master is always active and owns no calendar (confirmed 2026-10-28,
+    see item 7) -- a freshly-bootstrapped row starts `active=True`, not
+    the usual fail-safe-off default new devices get everywhere else.
+
+    Raises `MasterDeviceConflictError` if a *different* device is already
+    flagged master (e.g. this Pi's hostname changed after some other row
+    was manually flagged, or an admin set it by hand) -- deliberately
+    does not resolve this automatically by reassigning the flag, since
+    that would silently demote whatever the admin/previous boot actually
+    intended.
+    """
+    device_id = f"{device_type.value}{device_number}"
+    existing = get_device_by_device_id(session=session, device_id=device_id)
+    if existing is not None:
+        if not existing.is_master:
+            existing.is_master = True
+            existing.updated_at = utcnow()
+            session.add(existing)
+            session.commit()
+            session.refresh(existing)
+        return existing
+
+    other_master = get_master_device(session=session)
+    if other_master is not None:
+        raise MasterDeviceConflictError(
+            f"can't bootstrap {device_id} as master: {other_master.device_id} "
+            "is already flagged is_master=True"
+        )
+
+    device_create = DeviceCreate(
+        device_number=device_number,
+        device_name=f"Master ({device_id})",
+        device_type=device_type,
+        active=True,
+        is_master=True,
+    )
+    return create_device(session=session, device_create=device_create)
+
+
 def get_device_by_device_id(*, session: Session, device_id: str) -> Device | None:
     return session.exec(select(Device).where(Device.device_id == device_id)).first()
 

@@ -9,12 +9,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
+from sqlmodel import Session
 from starlette.middleware.cors import CORSMiddleware
 
 from app.api.main import api_router
 from app.core.config import settings
-from app.core.db import init_db
-from app.services import agenda_evaluator
+from app.core.db import engine, init_db
+from app.services import agenda_evaluator, device_bootstrap
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -30,6 +31,9 @@ if settings.SENTRY_DSN and settings.ENVIRONMENT != "local":
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     init_db()
+    if settings.IS_MASTER:
+        with Session(engine) as session:
+            device_bootstrap.bootstrap_own_device(session)
     stop = asyncio.Event()
     task = asyncio.create_task(agenda_evaluator.run_forever(stop=stop))
     try:

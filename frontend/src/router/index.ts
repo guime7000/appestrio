@@ -34,6 +34,11 @@ const router = createRouter({
           name: "configuration-clocks",
           component: () => import("@/views/HorlogesView.vue"),
         },
+        {
+          path: "reglages-lora",
+          name: "configuration-lora-settings",
+          component: () => import("@/views/LoraSettingsView.vue"),
+        },
       ],
     },
     {

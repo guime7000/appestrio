@@ -31,7 +31,7 @@ import sqlite3
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
 
-from . import backend_client, db, messages
+from . import backend_client, clock, db, messages
 from .messages import MessageType, PingType
 
 logger = logging.getLogger(__name__)
@@ -108,11 +108,11 @@ class EndpointResponder:
             self._handle_disable_agenda(buf)
         elif msg_type == MessageType.FILE_MSG:
             self._handle_file_msg(buf)
-        # SYNC (clock-setting) and PONG (master-bound only, see
-        # relaystrio.md: "Nodes ignore PONGs from others") are
-        # deliberately not handled here yet -- SYNC needs a still-open
-        # CAP_SYS_TIME-style operational answer (Lora_Daemon_To_Be_Done.md
-        # §4), not just code.
+        elif msg_type == MessageType.SYNC:
+            self._handle_sync(buf)
+        # PONG (master-bound only, see relaystrio.md: "Nodes ignore
+        # PONGs from others") is the one message type deliberately not
+        # handled here at all.
 
     # -- PING -> PONG --------------------------------------------------
 
@@ -226,6 +226,18 @@ class EndpointResponder:
         # No addressing at all -- implicitly global, matching SYNC
         # (Lora_Rewrite_Plan.md's wire-protocol notes).
         self._set_agenda_disabled(messages.decode_disable_agenda(buf))
+
+    # -- SYNC ----------------------------------------------------------------
+
+    def _handle_sync(self, buf: bytes) -> None:
+        # No addressing at all -- implicitly global, same as
+        # DISABLE_AGENDA (Lora_Rewrite_Plan.md's wire-protocol notes).
+        try:
+            when = messages.parse_sync_datetime(messages.decode_sync(buf))
+        except messages.MalformedMessageError:
+            logger.exception("SYNC frame received but couldn't be parsed -- ignoring")
+            return
+        clock.set_system_and_hardware_clock(when)
 
     # -- FILE_MSG ----------------------------------------------------------
 

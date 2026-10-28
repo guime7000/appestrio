@@ -64,6 +64,21 @@ def decode_sync(buf: bytes) -> str:
     return buf[1:end].decode("utf-8")
 
 
+def parse_sync_datetime(decoded: str) -> datetime:
+    """Parses `decode_sync`'s own string back into a `datetime` --
+    kept separate from `decode_sync` itself since the generic
+    decode-dispatch table (`decode_message`) and the hardware test
+    console both want the raw string for display, while
+    `EndpointResponder`'s receive-side clock-set (item 8's last gap)
+    wants a real `datetime`. Single source of truth for `_DATE_FORMAT`
+    stays here either way.
+    """
+    try:
+        return datetime.strptime(decoded, _DATE_FORMAT)
+    except ValueError as exc:
+        raise MalformedMessageError(f"SYNC datetime {decoded!r} doesn't parse: {exc}") from exc
+
+
 # --- PING -----------------------------------------------------------------
 
 

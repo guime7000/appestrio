@@ -28,6 +28,7 @@ import asyncio
 import json
 import logging
 import sqlite3
+from collections.abc import Coroutine
 from dataclasses import dataclass, field
 
 from . import backend_client, db, messages
@@ -163,6 +164,25 @@ class EndpointResponder:
     def _own_device_id(self) -> str:
         return f"{self._own_device_type}{self._own_device_number}"
 
+    def _schedule(self, coro: Coroutine[None, None, None]) -> None:
+        # Best-effort, fire-and-forget: only scheduled when there's a
+        # running event loop to schedule it on (there always is in the
+        # real daemon -- see daemon.py's run_daemon -- but not in a
+        # synchronous unit test calling handle_frame directly, which this
+        # must not require).
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            coro.close()
+            return
+        loop.create_task(coro)
+
+    def _set_agenda_disabled(self, disabled: bool) -> None:
+        self.agenda_disabled = disabled
+        self._schedule(
+            backend_client.notify_agenda_disabled(disabled, backend_url=self._backend_url)
+        )
+
     # -- ACTIVATE --------------------------------------------------------
 
     def _handle_activate(self, buf: bytes) -> None:
@@ -184,28 +204,28 @@ class EndpointResponder:
         db.reconcile_device_active(self._conn, self._own_device_id(), activate.active)
         # The physical effect (OSC/mpv/relay -- apply_active_state) lives
         # in `backend`, not here (Docs/To_Be_Done.md item 7's design), so
-        # it has to be told over HTTP. Best-effort, fire-and-forget: only
-        # scheduled when there's a running event loop to schedule it on
-        # (there always is in the real daemon -- see daemon.py's
-        # run_daemon -- but not in a synchronous unit test calling
-        # handle_frame directly, which this must not require).
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
-        loop.create_task(
+        # it has to be told over HTTP.
+        self._schedule(
             backend_client.notify_activate(
                 self._own_device_id(), activate.active, backend_url=self._backend_url
             )
         )
+        # A **broadcast**/multi-target ACTIVATE also implicitly disables
+        # the agenda on every receiver, matching `LoraApp::onRxFlag`
+        # (relaystrio.md §2.2: "a broadcast activate additionally disables
+        # the agenda ... so remote override doesn't get immediately
+        # fought by the next agenda tick"). A single-device ACTIVATE
+        # deliberately does NOT -- it's momentary and item 7's evaluator
+        # can overwrite it on its very next tick, same as legacy.
+        if activate.is_multi():
+            self._set_agenda_disabled(True)
 
     # -- DISABLE_AGENDA ----------------------------------------------------
 
     def _handle_disable_agenda(self, buf: bytes) -> None:
         # No addressing at all -- implicitly global, matching SYNC
-        # (Lora_Rewrite_Plan.md's wire-protocol notes). Stored for the
-        # local agenda evaluator (item 7, not built yet) to consult.
-        self.agenda_disabled = messages.decode_disable_agenda(buf)
+        # (Lora_Rewrite_Plan.md's wire-protocol notes).
+        self._set_agenda_disabled(messages.decode_disable_agenda(buf))
 
     # -- FILE_MSG ----------------------------------------------------------
 

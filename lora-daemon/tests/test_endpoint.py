@@ -307,6 +307,84 @@ def test_disable_agenda_sets_flag(db_path: str) -> None:
     assert responder.agenda_disabled is True
 
 
+async def test_disable_agenda_notifies_backend(
+    db_path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = []
+
+    async def fake_notify(disabled: bool, *, backend_url: str) -> None:
+        calls.append((disabled, backend_url))
+
+    monkeypatch.setattr(backend_client, "notify_agenda_disabled", fake_notify)
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    peer = LoopbackTransport(bus)
+    responder = _responder(conn, transport, backend_url="http://example:1234")
+
+    peer.send(encode_disable_agenda(True))
+    _deliver(transport, responder)
+    await asyncio.sleep(0)
+
+    assert calls == [(True, "http://example:1234")]
+
+
+async def test_broadcast_activate_also_disables_agenda(
+    db_path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    agenda_calls = []
+
+    async def fake_notify_agenda(disabled: bool, *, backend_url: str) -> None:
+        agenda_calls.append(disabled)
+
+    async def fake_notify_activate(device_id: str, active: bool, *, backend_url: str) -> None:
+        pass
+
+    monkeypatch.setattr(backend_client, "notify_agenda_disabled", fake_notify_agenda)
+    monkeypatch.setattr(backend_client, "notify_activate", fake_notify_activate)
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    peer = LoopbackTransport(bus)
+    responder = _responder(conn, transport)
+    assert responder.agenda_disabled is False
+
+    # No explicit addresses -> encode_activate defaults to BROADCAST_ADDRESS.
+    peer.send(encode_activate(True))
+    _deliver(transport, responder)
+    await asyncio.sleep(0)
+
+    assert responder.agenda_disabled is True
+    assert agenda_calls == [True]
+
+
+async def test_targeted_activate_does_not_disable_agenda(
+    db_path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    agenda_calls = []
+
+    async def fake_notify_agenda(disabled: bool, *, backend_url: str) -> None:
+        agenda_calls.append(disabled)
+
+    async def fake_notify_activate(device_id: str, active: bool, *, backend_url: str) -> None:
+        pass
+
+    monkeypatch.setattr(backend_client, "notify_agenda_disabled", fake_notify_agenda)
+    monkeypatch.setattr(backend_client, "notify_activate", fake_notify_activate)
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    peer = LoopbackTransport(bus)
+    responder = _responder(conn, transport)
+
+    peer.send(encode_activate(True, [LUMESTRIO_3_ADDRESS]))
+    _deliver(transport, responder)
+    await asyncio.sleep(0)
+
+    assert responder.agenda_disabled is False
+    assert agenda_calls == []
+
+
 def test_file_msg_start_not_addressed_to_us_is_ignored(db_path: str) -> None:
     conn = db.connect(db_path)
     bus = LoopbackBus()

@@ -113,6 +113,22 @@ def mark_device_synced(*, session: Session, device: Device, version: int) -> Dev
     return device
 
 
+def set_device_active(*, session: Session, device: Device, active: bool) -> Device:
+    # Deliberately bypasses update_device: `active` is state, not config
+    # (same rule `lora-daemon`'s `db.reconcile_device_active` enforces on
+    # its own direct-SQL writes to this same column) -- going through
+    # update_device would call bump_device_config_version and mark this
+    # device as pending a config push it doesn't actually need, for a
+    # value that was never part of what gets pushed in the first place.
+    # For the local agenda evaluator (item 7) and any other caller that
+    # just learned the device's own current on/off state.
+    device.active = active
+    session.add(device)
+    session.commit()
+    session.refresh(device)
+    return device
+
+
 def record_device_seen(
     *, session: Session, device: Device, roundtrip_ms: int | None = None
 ) -> Device:

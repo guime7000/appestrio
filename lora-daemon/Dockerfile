@@ -30,6 +30,14 @@ FROM python:3.14-slim
 
 ENV PYTHONUNBUFFERED=1
 
+# `hwclock` (clock.py's receive side of SYNC, item 8's last gap --
+# writes the system clock through to the physical RTC module) isn't in
+# this base image's util-linux package on this Debian release -- it's
+# split out into util-linux-extra. `date` (also used by clock.py) is
+# already present via coreutils, not installed explicitly here.
+RUN apt-get update && apt-get install -y --no-install-recommends util-linux-extra \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app/
 
 ENV PATH="/app/.venv/bin:$PATH"

@@ -1,9 +1,11 @@
 import asyncio
 import json
+from datetime import datetime
 
 import pytest
 
-from lora_daemon import backend_client, db
+from lora_daemon import backend_client, clock, db
+from lora_daemon.constants import MessageType
 from lora_daemon.devices import LoraDeviceType, build_address
 from lora_daemon.endpoint import EndpointResponder
 from lora_daemon.messages import (
@@ -14,6 +16,7 @@ from lora_daemon.messages import (
     encode_file_msg_chunk,
     encode_file_msg_start_versioned,
     encode_ping,
+    encode_sync,
 )
 from lora_daemon.transport import LoopbackBus, LoopbackTransport
 
@@ -290,6 +293,34 @@ def test_activate_without_running_event_loop_does_not_raise(db_path: str) -> Non
     responder = _responder(conn, transport)
 
     peer.send(encode_activate(True, [LUMESTRIO_3_ADDRESS]))
+    _deliver(transport, responder)  # must not raise
+
+
+def test_sync_sets_system_and_hardware_clock(
+    db_path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = []
+    monkeypatch.setattr(clock, "set_system_and_hardware_clock", lambda when: calls.append(when))
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    peer = LoopbackTransport(bus)
+    responder = _responder(conn, transport)
+
+    peer.send(encode_sync(datetime(2026, 10, 28, 9, 30, 0)))
+    _deliver(transport, responder)
+
+    assert calls == [datetime(2026, 10, 28, 9, 30, 0)]
+
+
+def test_sync_malformed_does_not_raise(db_path: str) -> None:
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    peer = LoopbackTransport(bus)
+    responder = _responder(conn, transport)
+
+    peer.send(bytes([MessageType.SYNC]) + b"garbage\x00")
     _deliver(transport, responder)  # must not raise
 
 

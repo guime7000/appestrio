@@ -19,6 +19,17 @@ def test_sync_round_trip() -> None:
     assert m.decode_sync(buf) == "18/09/2026 14:05:30"
 
 
+def test_sync_full_round_trip_through_parse_sync_datetime() -> None:
+    when = datetime(2026, 9, 18, 14, 5, 30)
+    buf = m.encode_sync(when)
+    assert m.parse_sync_datetime(m.decode_sync(buf)) == when
+
+
+def test_parse_sync_datetime_rejects_malformed_string() -> None:
+    with pytest.raises(m.MalformedMessageError):
+        m.parse_sync_datetime("not a date")
+
+
 def test_ping_round_trip() -> None:
     buf = m.encode_ping(
         agenda_disabled=True,

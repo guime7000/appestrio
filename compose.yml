@@ -40,6 +40,26 @@ services:
       # can run. Default (backend_client.DEFAULT_BACKEND_URL) already
       # matches this value; set explicitly here for discoverability.
       - BACKEND_URL=http://backend:8000
+    # SYNC's receive side (item 8's last gap, Docs/Lora_Daemon_To_Be_Done.md
+    # §5): setting the system clock (`date -s`) and writing it through to
+    # the physical RTC module on the GPIO pins (`hwclock --systohc`) both
+    # need CAP_SYS_TIME -- the kernel gates `settimeofday` and the RTC
+    # driver's RTC_SET_TIME ioctl on it identically. Without this grant,
+    # lora_daemon/clock.py logs a warning and otherwise no-ops (it never
+    # crashes the daemon over it), so this is required for SYNC to
+    # actually take effect, not for the container to start at all.
+    cap_add:
+      - SYS_TIME
+    devices:
+      # The RTC module itself, passed through so `hwclock` can reach it.
+      # Unlike the capability above, a MISSING device node here is fatal
+      # at container start (Docker refuses to start, not a runtime
+      # no-op) -- the module must already be wired up and recognized by
+      # the kernel as /dev/rtc0 (a device-tree overlay enabling it, e.g.
+      # `dtoverlay=i2c-rtc,ds3231` in /boot/firmware/config.txt, is a
+      # host-level prerequisite, same spirit as e32.service below) before
+      # this container will even boot.
+      - /dev/rtc0:/dev/rtc0
     volumes:
       - app-db-data:/app/data
       # e32.service (the host-level LoRa/UART driver, see

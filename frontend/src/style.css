@@ -137,12 +137,44 @@ body {
   gap: 0.35rem;
 }
 
+/* font-weight alone barely affects ✓/✗ in most fonts (they're drawn as
+   symbol glyphs, not weighted letterforms) -- the text-shadow stack
+   fakes a bolder/thicker stroke, which is what actually reads as
+   "bolder" here. */
 .icon-ok {
   color: #2e7d32;
-  font-weight: bold;
+  font-weight: 900;
+  font-size: 1.3rem;
+  text-shadow:
+    0 0 1px currentColor,
+    0.5px 0.5px 0 currentColor,
+    -0.5px -0.5px 0 currentColor,
+    0.5px -0.5px 0 currentColor,
+    -0.5px 0.5px 0 currentColor;
 }
 
 .icon-ko {
   color: #c62828;
-  font-weight: bold;
+  font-weight: 900;
+  font-size: 1.3rem;
+  text-shadow:
+    0 0 1px currentColor,
+    0.5px 0.5px 0 currentColor,
+    -0.5px -0.5px 0 currentColor,
+    0.5px -0.5px 0 currentColor,
+    -0.5px 0.5px 0 currentColor;
+}
+
+.bulb {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.bulb-on {
+  filter: drop-shadow(0 0 4px gold);
+}
+
+.bulb-off {
+  filter: grayscale(1) brightness(0.65);
+  opacity: 0.6;
 }

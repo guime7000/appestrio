@@ -370,9 +370,7 @@ onMounted(async () => {
                     </span>
                   </td>
                   <td class="status-cell">
-                    <span :class="device.active ? 'icon-ok' : 'icon-ko'">
-                      {{ device.active ? "✓" : "✗" }}
-                    </span>
+                    <span class="bulb" :class="device.active ? 'bulb-on' : 'bulb-off'">💡</span>
                     <button type="button" @click="toggleDeviceActive(device)">
                       {{ device.active ? "Éteindre" : "Allumer" }}
                     </button>
@@ -605,6 +603,20 @@ td {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.bulb {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.bulb-on {
+  filter: drop-shadow(0 0 4px gold);
+}
+
+.bulb-off {
+  filter: grayscale(1) brightness(0.65);
+  opacity: 0.6;
 }
 
 .modal-backdrop {

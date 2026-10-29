@@ -271,7 +271,7 @@ onMounted(loadDevices);
         </th>
         <th>Nom de série</th>
         <th>Nom sur le projet</th>
-        <th>Status</th>
+        <th>Statut</th>
         <th>Groupe</th>
         <th>Calendrier</th>
       </tr>
@@ -292,10 +292,14 @@ onMounted(loadDevices);
           </a>
         </td>
         <td class="status-cell">
-          <span :class="device.active ? 'icon-ok' : 'icon-ko'">
-            {{ device.active ? "✓" : "✗" }}
+          <span
+            class="bulb"
+            :class="device.active ? 'bulb-on' : 'bulb-off'"
+            :title="device.active ? 'Allumé' : 'Éteint'"
+          >
+            💡
           </span>
-          <button @click="toggleActive(device)">
+          <button type="button" @click="toggleActive(device)">
             {{ device.active ? "Éteindre" : "Allumer" }}
           </button>
         </td>
@@ -529,6 +533,20 @@ table {
   gap: 0.5rem;
 }
 
+.bulb {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.bulb-on {
+  filter: drop-shadow(0 0 4px gold);
+}
+
+.bulb-off {
+  filter: grayscale(1) brightness(0.65);
+  opacity: 0.6;
+}
+
 th,
 td {
   text-align: left;
@@ -646,15 +664,5 @@ td {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-}
-
-.icon-ok {
-  color: #2e7d32;
-  font-weight: bold;
-}
-
-.icon-ko {
-  color: #c62828;
-  font-weight: bold;
 }
 </style>

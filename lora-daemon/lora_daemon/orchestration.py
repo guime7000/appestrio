@@ -235,13 +235,21 @@ async def sync_device_config(
     max_missing_checks: int = DEFAULT_MAX_MISSING_CHECKS,
 ) -> bool:
     """Pushes one device's full resolved config over a single versioned
-    FILE_MSG transfer, then verifies delivery via WITH_MISSING_PARTS
-    pings, resending only what's missing. Returns True if fully delivered
-    (and marks it synced via mark_device_synced), False otherwise -- an
+    FILE_MSG transfer. For `lumestrio`, then verifies delivery via
+    WITH_MISSING_PARTS pings, resending only what's missing, and only
+    marks it synced once that verification comes back clean -- an
     undelivered device simply stays pending (config_version !=
     synced_version) and gets retried on the next call, per the automatic
-    cyclic-sync design (§9.7). Builds whichever wire shape matches the
-    target's device_type (see module docstring).
+    cyclic-sync design (§9.7). For `relaystrio`, there's no equivalent
+    "is this device actually in sync" question to answer -- its
+    `synced_version`/`config_version` pair exists purely as master's own
+    bookkeeping of "was this ever pushed", never a real device-confirmed
+    state (unlike `lumestrio`'s, which both a PONG's `config_version`
+    field and this function's own missing-parts check can genuinely
+    confirm) -- so a relaystrio is marked synced as soon as its chunks
+    are sent, with no reply-dependent verification step at all. Builds
+    whichever wire shape matches the target's device_type (see module
+    docstring).
     """
     config = db.resolve_device_config(conn, device_id)
     if config is None:
@@ -288,6 +296,15 @@ async def sync_device_config(
             transport.send(messages.encode_file_msg_chunk(index, chunk))
     finally:
         scheduler.resume()
+
+    if config.device_type != "lumestrio":
+        db.mark_device_synced(conn, device_id, config.config_version)
+        logger.info(
+            "sync_device_config: %s (relaystrio) sent, marked synced without reply-based "
+            "verification",
+            device_id,
+        )
+        return True
 
     missing: list[int] = list(range(len(chunks)))
     for _attempt in range(max_missing_checks):

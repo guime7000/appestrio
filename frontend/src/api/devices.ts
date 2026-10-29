@@ -19,4 +19,6 @@ export const devicesApi = {
     api.delete<{ message: string }>("/devices/", { device_ids: deviceIds }),
   freeDeviceNumbers: () => api.get<FreeDeviceNumbers>("/devices/free_devices_id"),
   pendingSync: () => api.get<PendingSyncStatus>("/devices/pending-sync"),
+  syncConfig: (deviceIds: string[]) =>
+    api.post<{ message: string }>("/devices/sync-config", { device_ids: deviceIds }),
 };

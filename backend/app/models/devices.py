@@ -179,6 +179,10 @@ class DeviceBulkDeleteRequest(SQLModel):
     device_ids: list[str] = Field(min_length=1)
 
 
+class DeviceSyncConfigRequest(SQLModel):
+    device_ids: list[str] = Field(min_length=1)
+
+
 class ActivateRequest(SQLModel):
     """Body for `POST /devices/{device_id}/activate` -- the reverse
     channel `lora-daemon` calls when an ACTIVATE frame addressed to this

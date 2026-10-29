@@ -202,6 +202,12 @@ async def test_sync_device_config_unknown_device(db_path: str) -> None:
 
 
 async def test_sync_device_config_relaystrio_happy_path(db_path: str) -> None:
+    """The scheduler/responder here are incidental, not load-bearing --
+    this device_type never gets missing-parts-verified at all (see
+    test_sync_device_config_relaystrio_marks_synced_without_any_reply),
+    this test just also happens to run a scheduler and asserts the wire
+    shape (plain, unversioned FILE_MSG) is right for relaystrio.
+    """
     conn = db.connect(db_path)
     _insert_device(
         conn,
@@ -280,6 +286,47 @@ async def test_sync_device_config_relaystrio_happy_path(db_path: str) -> None:
     # lumestrio-only JSON.
     assert b'"defaultWeek"' in body
     assert b'"agendaExceptionList"' in body
+
+
+async def test_sync_device_config_relaystrio_marks_synced_without_any_reply(
+    db_path: str,
+) -> None:
+    """relaystrio has no device-confirmable "is this actually in sync"
+    signal at all (no config_version field, and per 2026-10-29 field
+    feedback its missing-parts PONG can't be relied on either) -- so
+    unlike lumestrio, it must be marked synced as soon as its chunks are
+    sent, with no reply-dependent verification step. Proven here by never
+    running a scheduler/responder at all: the device gets zero chance to
+    reply, and the push still succeeds immediately.
+    """
+    conn = db.connect(db_path)
+    _insert_device(
+        conn,
+        device_id="relaystrio1",
+        device_type="relaystrio",
+        config_version=3,
+        synced_version=0,
+    )
+    conn.execute("UPDATE lora_settings SET is_active = 1 WHERE id = 1")
+    conn.commit()
+
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+
+    result = await orchestration.sync_device_config(
+        conn=conn,
+        transport=transport,
+        scheduler=scheduler,
+        device_id="relaystrio1",
+        chunk_delay_s=0.01,
+    )
+
+    assert result is True
+    row = conn.execute(
+        "SELECT synced_version FROM devices WHERE device_id = ?", ("relaystrio1",)
+    ).fetchone()
+    assert row[0] == 3
 
 
 async def test_sync_device_config_happy_path(db_path: str) -> None:

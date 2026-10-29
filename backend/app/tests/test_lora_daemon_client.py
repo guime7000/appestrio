@@ -62,6 +62,56 @@ def test_check_config_sync_sends_device_ids_and_returns_results() -> None:
     assert result == {"results": {"lumestrio3": True}}
 
 
+def test_sync_device_config_and_wait_polls_until_done() -> None:
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path == "/devices/lumestrio3/sync-config":
+            return httpx.Response(202, json={"started": True, "device_id": "lumestrio3"})
+        assert request.url.path == "/status"
+        state = "running" if len(calls) < 3 else "done"
+        return httpx.Response(
+            200,
+            json={"sync_status": {"lumestrio3": {"state": state, "success": state == "done"}}},
+        )
+
+    result = client_module.sync_device_config_and_wait(
+        "lumestrio3", poll_interval_s=0, client=_mock_client(handler)
+    )
+
+    assert result is True
+    assert calls[0] == "/devices/lumestrio3/sync-config"
+    assert calls.count("/status") >= 2
+
+
+def test_sync_device_config_and_wait_returns_false_on_error_state() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/devices/lumestrio3/sync-config":
+            return httpx.Response(202, json={"started": True, "device_id": "lumestrio3"})
+        return httpx.Response(
+            200, json={"sync_status": {"lumestrio3": {"state": "error", "success": False}}}
+        )
+
+    result = client_module.sync_device_config_and_wait(
+        "lumestrio3", poll_interval_s=0, client=_mock_client(handler)
+    )
+
+    assert result is False
+
+
+def test_sync_device_config_and_wait_raises_on_timeout() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/devices/lumestrio3/sync-config":
+            return httpx.Response(202, json={"started": True, "device_id": "lumestrio3"})
+        return httpx.Response(200, json={"sync_status": {"lumestrio3": {"state": "running"}}})
+
+    with pytest.raises(client_module.LoraDaemonError):
+        client_module.sync_device_config_and_wait(
+            "lumestrio3", poll_interval_s=0, timeout_s=0, client=_mock_client(handler)
+        )
+
+
 def test_request_raises_lora_daemon_error_on_connection_failure() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("connection refused", request=request)

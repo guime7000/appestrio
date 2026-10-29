@@ -12,6 +12,8 @@ Every function accepts an optional `client` so tests can inject one built
 with `httpx.MockTransport` instead of hitting a real socket.
 """
 
+import time
+
 import httpx
 
 from app.core.config import settings
@@ -23,6 +25,12 @@ DEFAULT_TIMEOUT_S = 5.0
 # take several seconds per batch -- the default 5s budget elsewhere in
 # this module isn't enough for that.
 CHECK_CONFIG_SYNC_TIMEOUT_S = 30.0
+# sync_device_config_and_wait polls lora-daemon's own fire-and-forget
+# /devices/{id}/sync-config to completion -- a full push (chunked
+# transfer + missing-parts verification, possibly several resend rounds)
+# can genuinely take tens of seconds for one device.
+SYNC_CONFIG_POLL_INTERVAL_S = 1.0
+SYNC_CONFIG_TIMEOUT_S = 90.0
 
 
 class LoraDaemonError(Exception):
@@ -73,6 +81,48 @@ def send_activate(
     return _request(
         "POST", "/activate", json={"active": active, "addresses": addresses}, client=client
     )
+
+
+def sync_device_config_and_wait(
+    device_id: str,
+    *,
+    poll_interval_s: float = SYNC_CONFIG_POLL_INTERVAL_S,
+    timeout_s: float = SYNC_CONFIG_TIMEOUT_S,
+    client: httpx.Client | None = None,
+) -> bool:
+    """Pushes `device_id`'s current desired config and blocks until
+    lora-daemon reports the push finished. lora-daemon's own
+    `/devices/{id}/sync-config` is fire-and-forget (202 immediately, the
+    real outcome lands later in `GET /status`'s `sync_status` dict) since
+    a full push+verify can take a while -- this wraps that dance into a
+    plain blocking bool so callers (the "push config now" route) don't
+    each reimplement the poll loop, the same way `check_config_sync`
+    already hides lora-daemon's own batching/pacing behind one call.
+
+    Returns True only if lora-daemon reports the push fully delivered
+    (`state == "done"` and `success`); False if it finished unsuccessfully
+    (missing parts never resolved). Raises LoraDaemonError if lora-daemon
+    is unreachable or never resolves `device_id`'s status within
+    `timeout_s`.
+    """
+    owns_client = client is None
+    http_client = client or httpx.Client(base_url=settings.LORA_DAEMON_URL, timeout=DEFAULT_TIMEOUT_S)
+    try:
+        trigger_sync_config(device_id, client=http_client)
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            status = _request("GET", "/status", client=http_client)
+            entry = status.get("sync_status", {}).get(device_id, {})
+            state = entry.get("state")
+            if state == "done":
+                return bool(entry.get("success"))
+            if state == "error":
+                return False
+            time.sleep(poll_interval_s)
+        raise LoraDaemonError(f"sync-config for {device_id!r} timed out after {timeout_s}s")
+    finally:
+        if owns_client:
+            http_client.close()
 
 
 def check_config_sync(device_ids: list[str], *, client: httpx.Client | None = None) -> dict:

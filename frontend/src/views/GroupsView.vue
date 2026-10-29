@@ -27,6 +27,7 @@ const editingGroupUuid = ref<string | null>(null);
 const selectedDeviceIds = ref<Set<string>>(new Set());
 const selectedGroupUuids = ref<Set<string>>(new Set());
 const pendingSyncCount = ref(0);
+const pendingSyncDeviceIds = ref<string[]>([]);
 
 const detailModalOpen = ref(false);
 const detailGroup = ref<GroupPublic | null>(null);
@@ -67,6 +68,7 @@ async function loadAll() {
     calendarsResult.data.map((c) => [c.uuid, c.label]),
   );
   pendingSyncCount.value = pendingSyncResult.count;
+  pendingSyncDeviceIds.value = pendingSyncResult.device_ids;
   selectedGroupUuids.value = new Set(
     [...selectedGroupUuids.value].filter((uuid) => groups.value.some((g) => g.uuid === uuid)),
   );
@@ -254,7 +256,11 @@ onMounted(async () => {
 </script>
 
 <template>
-  <PendingSyncBanner :count="pendingSyncCount" />
+  <PendingSyncBanner
+    :count="pendingSyncCount"
+    :device-ids="pendingSyncDeviceIds"
+    @synced="loadAll"
+  />
 
   <form class="create-form" @submit.prevent="createGroup">
     <input v-model="newGroupLabel" placeholder="Nom du groupe" required />

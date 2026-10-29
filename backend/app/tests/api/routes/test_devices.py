@@ -80,6 +80,171 @@ def test_pending_sync_empty_when_no_devices(client: TestClient) -> None:
     assert response.json() == {"count": 0, "device_ids": []}
 
 
+def test_sync_config_not_found(client: TestClient) -> None:
+    response = client.post(f"{DEVICES_URL}sync-config", json={"device_ids": ["nosuch"]})
+
+    assert response.status_code == 404
+
+
+def test_sync_config_requires_at_least_one_device_id(client: TestClient) -> None:
+    response = client.post(f"{DEVICES_URL}sync-config", json={"device_ids": []})
+
+    assert response.status_code == 422
+
+
+def test_sync_config_skips_already_synced_devices(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app import crud
+    from app.services import lora_daemon_client
+
+    created = client.post(DEVICES_URL, json=device_payload(device_number=1)).json()
+    device = crud.get_device_by_device_id(session=session, device_id=created["device_id"])
+    assert device is not None
+    crud.mark_device_synced(session=session, device=device, version=device.config_version)
+
+    def _fail(*_args: object, **_kwargs: object) -> bool:
+        raise AssertionError("should not push an already-synced device")
+
+    monkeypatch.setattr(lora_daemon_client, "sync_device_config_and_wait", _fail)
+
+    response = client.post(
+        f"{DEVICES_URL}sync-config", json={"device_ids": [created["device_id"]]}
+    )
+
+    assert response.status_code == 200
+    assert "Aucune configuration en attente" in response.json()["message"]
+
+
+def test_sync_config_marks_lumestrio_synced_once_confirmed(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app import crud
+    from app.services import lora_daemon_client
+
+    created = client.post(
+        DEVICES_URL, json=device_payload(device_type="lumestrio", device_number=2)
+    ).json()
+    device_id = created["device_id"]
+
+    monkeypatch.setattr(
+        lora_daemon_client, "sync_device_config_and_wait", lambda _device_id, **_kw: True
+    )
+    monkeypatch.setattr(
+        lora_daemon_client,
+        "check_config_sync",
+        lambda _device_ids, **_kw: {"results": {device_id: True}},
+    )
+
+    response = client.post(f"{DEVICES_URL}sync-config", json={"device_ids": [device_id]})
+
+    assert response.status_code == 200
+    assert "1/1 appareil(s) mis à jour" in response.json()["message"]
+    device = crud.get_device_by_device_id(session=session, device_id=device_id)
+    assert device is not None
+    assert device.synced_version == device.config_version
+
+
+def test_sync_config_does_not_mark_lumestrio_synced_without_real_confirmation(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app import crud
+    from app.services import lora_daemon_client
+
+    created = client.post(
+        DEVICES_URL, json=device_payload(device_type="lumestrio", device_number=3)
+    ).json()
+    device_id = created["device_id"]
+
+    monkeypatch.setattr(
+        lora_daemon_client, "sync_device_config_and_wait", lambda _device_id, **_kw: True
+    )
+    monkeypatch.setattr(
+        lora_daemon_client, "check_config_sync", lambda _device_ids, **_kw: {"results": {}}
+    )
+
+    response = client.post(f"{DEVICES_URL}sync-config", json={"device_ids": [device_id]})
+
+    assert response.status_code == 200
+    assert "0/1 appareil(s) mis à jour" in response.json()["message"]
+    assert device_id in response.json()["message"]
+    device = crud.get_device_by_device_id(session=session, device_id=device_id)
+    assert device is not None
+    assert device.synced_version != device.config_version
+
+
+def test_sync_config_marks_relaystrio_synced_on_delivery_alone(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app import crud
+    from app.services import lora_daemon_client
+
+    created = client.post(
+        DEVICES_URL, json=device_payload(device_type="relaystrio", device_number=4)
+    ).json()
+    device_id = created["device_id"]
+
+    monkeypatch.setattr(
+        lora_daemon_client, "sync_device_config_and_wait", lambda _device_id, **_kw: True
+    )
+
+    def _fail(*_args: object, **_kwargs: object) -> dict:
+        raise AssertionError("relaystrio has no config_version to confirm over LoRa")
+
+    monkeypatch.setattr(lora_daemon_client, "check_config_sync", _fail)
+
+    response = client.post(f"{DEVICES_URL}sync-config", json={"device_ids": [device_id]})
+
+    assert response.status_code == 200
+    assert "1/1 appareil(s) mis à jour" in response.json()["message"]
+    device = crud.get_device_by_device_id(session=session, device_id=device_id)
+    assert device is not None
+    assert device.synced_version == device.config_version
+
+
+def test_sync_config_reports_failure_when_push_fails(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app import crud
+    from app.services import lora_daemon_client
+
+    created = client.post(DEVICES_URL, json=device_payload(device_number=5)).json()
+    device_id = created["device_id"]
+
+    monkeypatch.setattr(
+        lora_daemon_client, "sync_device_config_and_wait", lambda _device_id, **_kw: False
+    )
+
+    response = client.post(f"{DEVICES_URL}sync-config", json={"device_ids": [device_id]})
+
+    assert response.status_code == 200
+    assert "0/1 appareil(s) mis à jour" in response.json()["message"]
+    device = crud.get_device_by_device_id(session=session, device_id=device_id)
+    assert device is not None
+    assert device.synced_version != device.config_version
+
+
+def test_sync_config_survives_unreachable_lora_daemon(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services import lora_daemon_client
+    from app.services.lora_daemon_client import LoraDaemonError
+
+    created = client.post(DEVICES_URL, json=device_payload(device_number=6)).json()
+
+    def _raise(*_args: object, **_kwargs: object) -> bool:
+        raise LoraDaemonError("unreachable")
+
+    monkeypatch.setattr(lora_daemon_client, "sync_device_config_and_wait", _raise)
+
+    response = client.post(
+        f"{DEVICES_URL}sync-config", json={"device_ids": [created["device_id"]]}
+    )
+
+    assert response.status_code == 200
+    assert "0/1 appareil(s) mis à jour" in response.json()["message"]
+
+
 def test_create_device_duplicate_device_id(client: TestClient) -> None:
     payload = device_payload(device_number=13)
     client.post(DEVICES_URL, json=payload)

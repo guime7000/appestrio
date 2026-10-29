@@ -13,6 +13,7 @@ from app.models import (
     DeviceCreate,
     DevicePublic,
     DevicesPublic,
+    DeviceSyncConfigRequest,
     DeviceType,
     DeviceUpdate,
     FreeDeviceNumbers,
@@ -143,6 +144,80 @@ def activate_device(session: SessionDep, device_id: str, payload: ActivateReques
         audiofile=device.audiofile,
     )
     return Message(message=f"activation applied for {device_id}")
+
+
+@router.post("/sync-config", response_model=Message)
+def sync_config(session: SessionDep, payload: DeviceSyncConfigRequest) -> Message:
+    """"Push configuration now" (the pending-sync banner's button): pushes
+    each requested device's current desired config over LoRa and, once
+    lora-daemon confirms delivery, marks it synced -- the write
+    counterpart to the read-only `/pending-sync` count and to groups.py's
+    "Test calendrier" check.
+
+    Devices are pushed strictly one at a time, in sequence: lora-daemon's
+    sync_device_config pauses/resumes its own scheduler for the duration
+    of each push and has no guard against two concurrent pushes stepping
+    on each other's pause/resume or colliding on the shared LoRa channel,
+    so this route is the one place that enforces "never two pushes in
+    flight at once" by construction. For a handful of pending devices
+    this can genuinely take tens of seconds to a few minutes -- callers
+    should show a busy state, not a tight timeout.
+    """
+    devices = crud.get_devices_by_device_ids(session=session, device_ids=payload.device_ids)
+    missing = set(payload.device_ids) - {device.device_id for device in devices}
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Device(s) not found: {', '.join(sorted(missing))}",
+        )
+
+    pending = [d for d in devices if d.config_version != d.synced_version]
+    if not pending:
+        return Message(message="Aucune configuration en attente pour les appareils sélectionnés.")
+
+    succeeded = 0
+    failed: list[str] = []
+    for device in pending:
+        try:
+            pushed = lora_daemon_client.sync_device_config_and_wait(device.device_id)
+        except LoraDaemonError:
+            logger.warning("couldn't reach lora-daemon to push config for %s", device.device_id)
+            failed.append(device.device_id)
+            continue
+        if not pushed:
+            failed.append(device.device_id)
+            continue
+
+        if device.device_type == DeviceType.LUMESTRIO:
+            # Real confirmation: ask the device itself for its own
+            # applied config_version, same as "Test calendrier".
+            try:
+                results = lora_daemon_client.check_config_sync([device.device_id])
+            except LoraDaemonError:
+                results = {}
+            confirmed = results.get("results", {}).get(device.device_id, False)
+        else:
+            # relaystrio has no device-confirmable "is this actually in
+            # sync" signal at all -- no config_version field (see
+            # groups.py's test_calendar), and lora-daemon's own
+            # sync_device_config deliberately doesn't wait on a
+            # missing-parts reply for this device_type either (2026-10-29
+            # field feedback: don't gate relaystrio's sync status on any
+            # device response). sync_device_config_and_wait already
+            # returned True as soon as the chunks were sent, so there's
+            # nothing further to confirm here.
+            confirmed = True
+
+        if confirmed:
+            crud.mark_device_synced(session=session, device=device, version=device.config_version)
+            succeeded += 1
+        else:
+            failed.append(device.device_id)
+
+    parts = [f"{succeeded}/{len(pending)} appareil(s) mis à jour."]
+    if failed:
+        parts.append(f"Échec pour : {', '.join(sorted(failed))}.")
+    return Message(message=" ".join(parts))
 
 
 @router.delete("/", response_model=Message)

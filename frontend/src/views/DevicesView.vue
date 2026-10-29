@@ -20,6 +20,7 @@ const devices = ref<DevicePublic[]>([]);
 const groups = ref<GroupPublic[]>([]);
 const selectedDeviceIds = ref<Set<string>>(new Set());
 const pendingSyncCount = ref(0);
+const pendingSyncDeviceIds = ref<string[]>([]);
 
 const detailModalOpen = ref(false);
 const detailDevice = ref<DevicePublic | null>(null);
@@ -87,6 +88,7 @@ async function loadDevices() {
   devices.value = devicesResult.data;
   groups.value = groupsResult.data;
   pendingSyncCount.value = pendingSyncResult.count;
+  pendingSyncDeviceIds.value = pendingSyncResult.device_ids;
   selectedDeviceIds.value = new Set(
     [...selectedDeviceIds.value].filter((id) => devices.value.some((d) => d.device_id === id)),
   );
@@ -254,7 +256,11 @@ onMounted(loadDevices);
 </script>
 
 <template>
-  <PendingSyncBanner :count="pendingSyncCount" />
+  <PendingSyncBanner
+    :count="pendingSyncCount"
+    :device-ids="pendingSyncDeviceIds"
+    @synced="loadDevices"
+  />
 
   <div class="bulk-actions">
     <button type="button" @click="openCreateModal">Créer un appareil</button>

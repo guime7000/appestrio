@@ -17,6 +17,12 @@ import httpx
 from app.core.config import settings
 
 DEFAULT_TIMEOUT_S = 5.0
+# check_config_sync blocks on a real multi-device round trip
+# (lora-daemon paces it in batches to avoid flooding the LoRa channel --
+# see orchestration.check_lumestrio_config_sync), which can genuinely
+# take several seconds per batch -- the default 5s budget elsewhere in
+# this module isn't enough for that.
+CHECK_CONFIG_SYNC_TIMEOUT_S = 30.0
 
 
 class LoraDaemonError(Exception):
@@ -33,10 +39,11 @@ def _request(
     *,
     json: dict | None = None,
     client: httpx.Client | None = None,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
 ) -> dict:
     owns_client = client is None
     http_client = client or httpx.Client(
-        base_url=settings.LORA_DAEMON_URL, timeout=DEFAULT_TIMEOUT_S
+        base_url=settings.LORA_DAEMON_URL, timeout=timeout_s
     )
     try:
         response = http_client.request(method, path, json=json)
@@ -65,4 +72,21 @@ def send_activate(
 ) -> dict:
     return _request(
         "POST", "/activate", json={"active": active, "addresses": addresses}, client=client
+    )
+
+
+def check_config_sync(device_ids: list[str], *, client: httpx.Client | None = None) -> dict:
+    """Blocks until lora-daemon has a real, device-confirmed answer for
+    every `device_id` (or its response window elapses) -- see
+    orchestration.check_lumestrio_config_sync for what "real" means here
+    (a live `WITH_CONFIG_VERSION` round trip, not an inferred guess).
+    Returns `{"results": {device_id: bool}}`; a `device_id` missing from
+    `results` simply didn't reply in time.
+    """
+    return _request(
+        "POST",
+        "/devices/check-config-sync",
+        json={"device_ids": device_ids},
+        client=client,
+        timeout_s=CHECK_CONFIG_SYNC_TIMEOUT_S,
     )

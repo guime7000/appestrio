@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, HTTPException
@@ -17,6 +18,10 @@ from app.models import (
     GroupUpdate,
     Message,
 )
+from app.services import lora_daemon_client
+from app.services.lora_daemon_client import LoraDaemonError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/groups", tags=["groups"])
 
@@ -81,36 +86,63 @@ def set_group_devices(
 
 @router.post("/{group_uuid}/test-calendar", response_model=Message)
 def test_calendar(session: SessionDep, group_uuid: uuid.UUID) -> Message:
-    """Checks whether every lumestrio device in the group is actually in
-    sync with master -- what "Test calendrier" (GroupsView.vue) means: a
-    verification, not a trigger. `config_version` is master's
-    authoritative "current desired config" counter; `synced_version` is
-    the last value lora-daemon has confirmed the device actually applied
-    (from a real PONG, not just "a push was sent") -- see crud.py's
-    `mark_device_synced` for why that distinction matters. The two
-    matching is the actual proof a device is in sync; nothing is pushed
-    or triggered here, this only reads the already-shared DB state.
-    relaystrio members are reported separately since config-sync isn't
-    implemented for them at all yet (item 4 in To_Be_Done.md) -- the
-    comparison wouldn't mean anything for them.
+    """"Test calendrier" (GroupsView.vue): a real, on-demand verification
+    that every device in the group actually has the right calendar
+    applied, not a config push.
+
+    For `lumestrio`: asks each device directly, live, over LoRa
+    (`lora_daemon_client.check_config_sync` -> `orchestration
+    .check_lumestrio_config_sync`) -- a real `WITH_CONFIG_VERSION` round
+    trip, not an inference from "no missing chunks were reported" (see
+    that function's own docstring for why that distinction matters, and
+    why checking several devices at once is paced to avoid flooding the
+    shared LoRa channel). A device the call doesn't hear back from
+    within its response window -- or every device, if `lora-daemon`
+    itself is unreachable -- is reported as pending, never silently
+    assumed in sync from stale local data.
+
+    For `relaystrio`: no live check is possible at all -- the frozen
+    firmware has no way to report its own applied `config_version` back
+    (no field, no concept). The best that can ever be said is the same
+    optimistic "master believes it pushed successfully"
+    `config_version == synced_version` comparison `sync_device_config`
+    already relies on -- reported separately, and labeled "presumed",
+    never conflated with a `lumestrio`'s actual confirmation.
     """
     group = _get_group_or_404(session, group_uuid)
-    in_sync = 0
-    pending = 0
-    skipped = 0
-    for device in group.devices:
-        if device.device_type != DeviceType.LUMESTRIO:
-            skipped += 1
-        elif device.config_version == device.synced_version:
-            in_sync += 1
-        else:
-            pending += 1
+    lumestrio_devices = [d for d in group.devices if d.device_type == DeviceType.LUMESTRIO]
+    relaystrio_devices = [d for d in group.devices if d.device_type == DeviceType.RELAYSTRIO]
 
-    parts = [f"{in_sync} lumestrio device(s) in sync"]
-    if pending:
-        parts.append(f"{pending} pending")
-    if skipped:
-        parts.append(f"{skipped} relaystrio skipped (not yet supported)")
+    live_results: dict[str, bool] = {}
+    if lumestrio_devices:
+        try:
+            response = lora_daemon_client.check_config_sync(
+                [device.device_id for device in lumestrio_devices]
+            )
+            live_results = response["results"]
+        except LoraDaemonError:
+            logger.warning("couldn't reach lora-daemon for a live config-sync check")
+
+    parts = []
+    if lumestrio_devices:
+        lumestrio_in_sync = sum(
+            1 for device in lumestrio_devices if live_results.get(device.device_id) is True
+        )
+        parts.append(
+            f"{lumestrio_in_sync}/{len(lumestrio_devices)} lumestrio device(s) confirmed in sync"
+        )
+    if relaystrio_devices:
+        relaystrio_in_sync = sum(
+            1
+            for device in relaystrio_devices
+            if device.config_version == device.synced_version
+        )
+        parts.append(
+            f"{relaystrio_in_sync}/{len(relaystrio_devices)} relaystrio device(s) presumed in "
+            "sync (no confirmation possible)"
+        )
+    if not parts:
+        return Message(message="no devices in this group")
     return Message(message=", ".join(parts))
 
 

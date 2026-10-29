@@ -55,7 +55,13 @@ import logging
 from datetime import datetime
 
 from . import config_payload, db, hexconf, messages, relaystrio_agenda
-from .constants import FILE_CHUNK_SIZE, MIN_CLOCK_INTERVAL_S
+from .constants import (
+    FILE_CHUNK_SIZE,
+    MIN_CLOCK_INTERVAL_S,
+    MIN_DELAY_FOR_RESP_MS,
+    MIN_PING_INTERVAL_S,
+    get_num_in_ping,
+)
 from .devices import address_for_device_id
 from .messages import PingType
 from .scheduler import PingScheduler
@@ -185,7 +191,11 @@ async def _wait_for_missing_parts(
     reply_timeout_s for that specific device's PONG. Returns its
     missing_parts, or None if no reply arrived in time. Temporarily
     installs an on_pong hook -- restored (not just cleared) afterward, in
-    case something else is already using it.
+    case something else is already using it. Holds scheduler.on_pong_lock
+    for the duration -- on_pong is a single mutable hook, shared with
+    check_lumestrio_config_sync's own temporary swap; without this lock
+    the two could silently steal or corrupt each other's replies if they
+    ever ran concurrently.
     """
     result: list[tuple[int, ...] | None] = [None]
     got_reply = asyncio.Event()
@@ -195,21 +205,22 @@ async def _wait_for_missing_parts(
             result[0] = pong.missing_parts
             got_reply.set()
 
-    previous_hook = scheduler.on_pong
-    previous_ping_type = scheduler.ping_type
-    scheduler.on_pong = _on_pong
-    scheduler.ping_type = PingType.WITH_MISSING_PARTS
-    try:
-        scheduler.request_ping(address)
+    async with scheduler.on_pong_lock:
+        previous_hook = scheduler.on_pong
+        previous_ping_type = scheduler.ping_type
+        scheduler.on_pong = _on_pong
+        scheduler.ping_type = PingType.WITH_MISSING_PARTS
         try:
-            await asyncio.wait_for(got_reply.wait(), timeout=reply_timeout_s)
-        except TimeoutError:
-            pass
-        return result[0]
-    finally:
-        scheduler.on_pong = previous_hook
-        scheduler.ping_type = previous_ping_type
-        scheduler.stop_pinging(address)
+            scheduler.request_ping(address)
+            try:
+                await asyncio.wait_for(got_reply.wait(), timeout=reply_timeout_s)
+            except TimeoutError:
+                pass
+            return result[0]
+        finally:
+            scheduler.on_pong = previous_hook
+            scheduler.ping_type = previous_ping_type
+            scheduler.stop_pinging(address)
 
 
 async def sync_device_config(
@@ -316,6 +327,125 @@ async def sync_device_config(
     db.mark_device_synced(conn, device_id, config.config_version)
     logger.info("sync_device_config: %s synced to version %s", device_id, config.config_version)
     return True
+
+
+DEFAULT_CONFIG_VERSION_CHECK_MARGIN_S = 2.0
+
+
+async def check_lumestrio_config_sync(
+    *,
+    conn: object,
+    scheduler: PingScheduler,
+    device_ids: list[str],
+) -> dict[str, bool]:
+    """Requests each device's own currently-applied `config_version` via
+    a real `WITH_CONFIG_VERSION` round trip -- unlike `sync_device_config`'s
+    own `mark_device_synced` call, which only ever writes master's own
+    locally-read value after inferring success from "no missing chunks
+    reported." Reconciles `db.mark_device_synced` from each real reply
+    (self-healing against drift from any cause, same contract every
+    other PONG-driven reconciliation in this codebase already follows),
+    then reports whether it now matches master's own `config_version`.
+
+    Only meaningful for `lumestrio` -- `relaystrio` firmware has no
+    `config_version` concept at all (no field, no way to report one
+    back). Raises `ValueError` up front for any unknown or non-lumestrio
+    `device_id`, rather than silently skipping it.
+
+    Sends addresses in batches sized to fit one PING's TDMA slot window
+    (`constants.get_num_in_ping`, derived from `LoraSettings
+    .ping_interval_s`), waiting out each batch's own response window
+    before sending the next -- checking many devices at once must not
+    flood the shared channel with one oversized or overlapping PING.
+    Only pauses the scheduler's own routine *sending* for the whole
+    operation (the same channel-priority mechanism ACTIVATE/clock-sync/
+    config-push already use) -- `pause()` leaves the scheduler's
+    `run_forever()` poll loop itself running, which is relied on to
+    actually drain the transport and dispatch each `PONG` to the
+    `on_pong` hook below (same assumption `_wait_for_missing_parts`
+    already makes -- `run_forever()` must already be running as the
+    daemon's sole transport poller, per item 8's "exactly one owner
+    polls" rule; this function never polls on its own). Also holds
+    `on_pong_lock`, since `on_pong` is a single mutable hook shared with
+    `sync_device_config`'s own
+    `WITH_MISSING_PARTS` wait (`_wait_for_missing_parts`).
+
+    Returns `{device_id: in_sync}` for every device that replied within
+    its batch's window. A `device_id` missing from the result simply
+    didn't reply in time -- still pending, left untouched (no change
+    made on a timeout, same "stays pending, retried later" spirit
+    `sync_device_config` itself already uses).
+    """
+    identities = {identity.device_id: identity for identity in db.list_device_identities(conn)}
+    addresses: dict[str, int] = {}
+    for device_id in device_ids:
+        identity = identities.get(device_id)
+        if identity is None:
+            raise ValueError(f"unknown device_id {device_id!r}")
+        if identity.device_type != "lumestrio":
+            raise ValueError(
+                f"{device_id!r} is a {identity.device_type} -- relaystrio has no "
+                "config_version concept to check"
+            )
+        addresses[device_id] = address_for_device_id(device_id, identity.device_type)
+
+    if not addresses:
+        return {}
+
+    master_versions = db.get_config_versions(conn, list(addresses))
+
+    settings = db.get_lora_settings(conn)
+    batch_size = max(1, get_num_in_ping(max(settings.ping_interval_s, MIN_PING_INTERVAL_S) * 1000))
+    all_addresses = list(addresses.values())
+    batches = [all_addresses[i : i + batch_size] for i in range(0, len(all_addresses), batch_size)]
+
+    results: dict[str, bool] = {}
+    pending_in_batch: set[int] = set()
+    batch_done = asyncio.Event()
+
+    def _on_pong(identity: db.DeviceIdentity, pong: messages.Pong) -> None:
+        address = addresses.get(identity.device_id)
+        if address is None or address not in pending_in_batch or pong.config_version is None:
+            return
+        db.mark_device_synced(conn, identity.device_id, pong.config_version)
+        results[identity.device_id] = pong.config_version == master_versions[identity.device_id]
+        pending_in_batch.discard(address)
+        if not pending_in_batch:
+            batch_done.set()
+
+    scheduler.pause()
+    try:
+        async with scheduler.on_pong_lock:
+            previous_hook = scheduler.on_pong
+            previous_ping_type = scheduler.ping_type
+            scheduler.on_pong = _on_pong
+            scheduler.ping_type = PingType.WITH_CONFIG_VERSION
+            try:
+                for batch in batches:
+                    pending_in_batch = set(batch)
+                    batch_done.clear()
+                    scheduler.send_ping_round_for(batch, PingType.WITH_CONFIG_VERSION)
+                    batch_timeout_s = (
+                        len(batch) * MIN_DELAY_FOR_RESP_MS / 1000
+                        + DEFAULT_CONFIG_VERSION_CHECK_MARGIN_S
+                    )
+                    try:
+                        await asyncio.wait_for(batch_done.wait(), timeout=batch_timeout_s)
+                    except TimeoutError:
+                        pass
+            finally:
+                scheduler.on_pong = previous_hook
+                scheduler.ping_type = previous_ping_type
+    finally:
+        scheduler.resume()
+
+    logger.info(
+        "check_lumestrio_config_sync: %d/%d device(s) replied (%s)",
+        len(results),
+        len(addresses),
+        results,
+    )
+    return results
 
 
 async def run_agenda_sync_forever(

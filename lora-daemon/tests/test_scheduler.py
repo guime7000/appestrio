@@ -88,6 +88,35 @@ def test_send_one_ping_round_round_robins_across_ticks(db_path: str) -> None:
     assert second_round == (30, 10)
 
 
+def test_send_ping_round_for_pings_exactly_the_given_addresses(db_path: str) -> None:
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    listener = LoopbackTransport(bus)
+    scheduler = sched_mod.PingScheduler(conn=conn, transport=transport)
+
+    scheduler.send_ping_round_for([10, 20, 30], PingType.WITH_CONFIG_VERSION)
+
+    [frame] = listener.receive_all()
+    ping = decode_ping(frame)
+    assert ping.addresses == (10, 20, 30)
+    assert ping.ping_type == PingType.WITH_CONFIG_VERSION
+
+
+def test_send_ping_round_for_ignores_pingable_set(db_path: str) -> None:
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    listener = LoopbackTransport(bus)
+    scheduler = sched_mod.PingScheduler(conn=conn, transport=transport)
+    scheduler.request_ping(99)  # unrelated address, must not leak in
+
+    scheduler.send_ping_round_for([10, 20], PingType.PLAIN)
+
+    [frame] = listener.receive_all()
+    assert decode_ping(frame).addresses == (10, 20)
+
+
 def test_poll_incoming_records_pong(db_path: str) -> None:
     conn = db.connect(db_path)
     _insert_device(conn)
@@ -110,6 +139,27 @@ def test_poll_incoming_records_pong(db_path: str) -> None:
     assert row["active"] == 1
     assert row["last_seen"] is not None
     assert row["last_roundtrip_ms"] is not None
+
+
+def test_poll_incoming_decodes_config_version_when_requested(db_path: str) -> None:
+    conn = db.connect(db_path)
+    _insert_device(conn)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    device = LoopbackTransport(bus)
+    scheduler = sched_mod.PingScheduler(conn=conn, transport=transport)
+    scheduler.ping_type = PingType.WITH_CONFIG_VERSION
+    seen = []
+    scheduler.on_pong = lambda identity, pong: seen.append(pong.config_version)
+    scheduler.request_ping(LUMESTRIO_3_ADDRESS)
+
+    scheduler.send_one_ping_round(ping_interval_s=5)
+    device.receive_all()
+    device.send(encode_pong(address=LUMESTRIO_3_ADDRESS, active=True, config_version=7))
+
+    scheduler.poll_incoming()
+
+    assert seen == [7]
 
 
 def test_poll_incoming_ignores_pong_from_unpinged_address(db_path: str) -> None:

@@ -129,7 +129,7 @@ async def _handle_connection(
         length = int(headers.get("content-length") or 0)
         body = await reader.readexactly(length) if length else b""
 
-        status, content_type, body_bytes = _dispatch(
+        status, content_type, body_bytes = await _dispatch(
             method, path, body, scheduler, conn, transport, sync_status
         )
     except ControlApiError as exc:
@@ -153,7 +153,7 @@ async def _handle_connection(
             await writer.wait_closed()
 
 
-def _dispatch(
+async def _dispatch(
     method: str,
     path: str,
     body: bytes,
@@ -181,6 +181,8 @@ def _dispatch(
     if method == "POST" and path.startswith("/devices/") and path.endswith("/sync-config"):
         device_id = path[len("/devices/") : -len("/sync-config")]
         return _sync_config(device_id, scheduler, conn, transport, sync_status)
+    if method == "POST" and path == "/devices/check-config-sync":
+        return await _check_config_sync(body, scheduler, conn)
     if method == "POST" and path == "/pause":
         scheduler.pause()
         return _json(200, {"paused": True})
@@ -294,6 +296,30 @@ def _sync_config(
     sync_status[device_id] = {"state": "running", "success": None}
     asyncio.create_task(_run())
     return _json(202, {"started": True, "device_id": device_id})
+
+
+async def _check_config_sync(
+    body: bytes, scheduler: PingScheduler, conn: sqlite3.Connection
+) -> _Response:
+    """Unlike /devices/{id}/sync-config's fire-and-forget-then-poll
+    pattern, this genuinely blocks until every requested lumestrio has
+    either replied with its real applied config_version or its batch's
+    response window elapsed -- "Test calendrier" (GroupsView.vue) is a
+    verification the caller is actually waiting on an answer for, not a
+    push it can just fire and check back on later. One of this file's
+    deliberately few async routes, for exactly that reason.
+    """
+    request = _parse_json_body(body)
+    device_ids = request.get("device_ids")
+    if not isinstance(device_ids, list) or not all(isinstance(d, str) for d in device_ids):
+        raise ControlApiError(400, "'device_ids' must be a list of strings")
+    try:
+        results = await orchestration.check_lumestrio_config_sync(
+            conn=conn, scheduler=scheduler, device_ids=device_ids
+        )
+    except ValueError as exc:
+        raise ControlApiError(400, str(exc)) from exc
+    return _json(200, {"results": results})
 
 
 def _parse_json_body(body: bytes) -> dict:

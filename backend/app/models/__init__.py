@@ -1,5 +1,13 @@
 from sqlmodel import SQLModel
 
+from app.models.audio import (
+    DEFAULT_VOLUME,
+    MAX_VOLUME,
+    MIN_VOLUME,
+    AudioLoopRequest,
+    AudioStatusPublic,
+    AudioVolumeRequest,
+)
 from app.models.calendars import (
     Calendar,
     CalendarBase,
@@ -132,4 +140,10 @@ __all__ = [
     "Message",
     "WhoAmI",
     "utcnow",
+    "DEFAULT_VOLUME",
+    "MAX_VOLUME",
+    "MIN_VOLUME",
+    "AudioLoopRequest",
+    "AudioStatusPublic",
+    "AudioVolumeRequest",
 ]

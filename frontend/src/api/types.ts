@@ -173,3 +173,12 @@ export interface LoraSettingsUpdate {
   clock_interval_s?: number;
   relaystrio_recurring_threshold_days?: number;
 }
+
+export interface AudioStatusPublic {
+  handles_audio: boolean;
+  audiofile: string | null;
+  test_audiofile: string | null;
+  volume: number;
+  loop: boolean;
+  playing: boolean;
+}

@@ -136,6 +136,12 @@ class PingScheduler:
         self.ping_type = PingType.PLAIN
         self.disable_wifi = False
         self.on_pong: object = None  # Callable[[db.DeviceIdentity, messages.Pong], None] | None
+        # Guards every temporary on_pong/ping_type swap (orchestration's
+        # _wait_for_missing_parts and check_lumestrio_config_sync both do
+        # this) -- on_pong is a single mutable hook, not a multi-subscriber
+        # event bus, so two such swaps running concurrently would silently
+        # steal or corrupt each other's replies.
+        self.on_pong_lock = asyncio.Lock()
 
     # -- external API, mirrors legacy's setPingableState -----------------
 
@@ -188,22 +194,40 @@ class PingScheduler:
             self._current_ping_idx = (self._current_ping_idx + 1) % len(addresses)
             chosen.append(addresses[self._current_ping_idx])
 
+        self._send_ping_batch(chosen, self.ping_type)
+
+    def send_ping_round_for(self, addresses: list[int], ping_type: PingType) -> None:
+        """Like send_one_ping_round, but for an explicit address list
+        instead of drawing from `self.pingable` -- for a caller that
+        needs to address specific devices directly (orchestration's
+        check_lumestrio_config_sync) without the pingable set's
+        keep-alive TTL (10s, PingableList's own `keep_alive_s`) silently
+        evicting an address before a multi-batch wait that can run
+        longer than that completes. Caller is responsible for keeping
+        `addresses` within one PING's slot budget (constants
+        .get_num_in_ping) and for pausing the scheduler first, same as
+        any other higher-priority send (see this module's own
+        channel-priority docstring note).
+        """
+        self._send_ping_batch(addresses, ping_type)
+
+    def _send_ping_batch(self, addresses: list[int], ping_type: PingType) -> None:
         centisec = MIN_DELAY_FOR_RESP_MS // 10
         buf = messages.encode_ping(
             agenda_disabled=self.agenda_disabled,
-            ping_type=self.ping_type,
+            ping_type=ping_type,
             disable_wifi=self.disable_wifi,
             slot_delay_centisec=centisec,
-            addresses=chosen,
+            addresses=addresses,
         )
         now = time.monotonic()
         self._slots_by_address = {
             address: _PingedSlot(address=address, fire_at=now + i * (MIN_DELAY_FOR_RESP_MS / 1000))
-            for i, address in enumerate(chosen)
+            for i, address in enumerate(addresses)
         }
-        self._last_ping_type = self.ping_type
+        self._last_ping_type = ping_type
         self._transport.send(buf)
-        logger.info("sent PING to addresses %s", chosen)
+        logger.info("sent PING to addresses %s", addresses)
 
     # -- receiving PONGs, ported from processLoraMsg's PONG branch -------
 
@@ -224,6 +248,7 @@ class PingScheduler:
             return  # only PONGs are this scheduler's own concern
         pong = messages.decode_pong(
             buf,
+            expect_config_version=self._last_ping_type == PingType.WITH_CONFIG_VERSION,
             expect_agenda_md5=self._last_ping_type == PingType.WITH_AGENDA_MD5,
             expect_missing_parts=self._last_ping_type == PingType.WITH_MISSING_PARTS,
         )

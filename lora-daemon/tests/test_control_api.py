@@ -46,6 +46,12 @@ async def _start(scheduler, conn, transport):
     return server, serve_task, host, port
 
 
+async def _cancel(task: asyncio.Task) -> None:
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+
+
 async def _stop(server, serve_task) -> None:
     server.close()
     await server.wait_closed()
@@ -391,4 +397,87 @@ async def test_sync_config_starts_background_task_and_reports_status(db_path: st
         status, payload = await _request(host, port, "GET", "/status")
         assert payload["sync_status"]["lumestrio3"]["state"] in ("running", "done", "error")
     finally:
+        await _stop(server, serve_task)
+
+
+async def test_check_config_sync_rejects_non_list_device_ids(db_path: str) -> None:
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+    server, serve_task, host, port = await _start(scheduler, conn, transport)
+    try:
+        status, payload = await _request(
+            host,
+            port,
+            "POST",
+            "/devices/check-config-sync",
+            json.dumps({"device_ids": "lumestrio3"}).encode(),
+        )
+        assert status == 400
+        assert "device_ids" in payload["error"]
+    finally:
+        await _stop(server, serve_task)
+
+
+async def test_check_config_sync_rejects_relaystrio(db_path: str) -> None:
+    conn = db.connect(db_path)
+    _insert_device(conn, device_id="relaystrio1", device_type="relaystrio")
+    conn.commit()
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+    server, serve_task, host, port = await _start(scheduler, conn, transport)
+    try:
+        status, payload = await _request(
+            host,
+            port,
+            "POST",
+            "/devices/check-config-sync",
+            json.dumps({"device_ids": ["relaystrio1"]}).encode(),
+        )
+        assert status == 400
+        assert "config_version concept" in payload["error"]
+    finally:
+        await _stop(server, serve_task)
+
+
+async def test_check_config_sync_happy_path_through_http(db_path: str) -> None:
+    conn = db.connect(db_path)
+    _insert_device(conn, config_version=5, synced_version=0)
+    conn.commit()
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    device = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+    server, serve_task, host, port = await _start(scheduler, conn, transport)
+    ping_task = asyncio.create_task(scheduler.run_forever())
+
+    async def device_responder() -> None:
+        while True:
+            for frame in device.receive_all():
+                if frame and frame[0] == int(messages.MessageType.PING):
+                    ping = messages.decode_ping(frame)
+                    if ping.ping_type == messages.PingType.WITH_CONFIG_VERSION:
+                        device.send(
+                            messages.encode_pong(
+                                address=LUMESTRIO_3_ADDRESS, active=True, config_version=5
+                            )
+                        )
+            await asyncio.sleep(0.01)
+
+    responder_task = asyncio.create_task(device_responder())
+    try:
+        status, payload = await _request(
+            host,
+            port,
+            "POST",
+            "/devices/check-config-sync",
+            json.dumps({"device_ids": ["lumestrio3"]}).encode(),
+        )
+        assert status == 200
+        assert payload == {"results": {"lumestrio3": True}}
+    finally:
+        await _cancel(ping_task)
+        await _cancel(responder_task)
         await _stop(server, serve_task)

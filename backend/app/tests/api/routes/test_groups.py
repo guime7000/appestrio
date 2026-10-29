@@ -1,10 +1,13 @@
 import uuid
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.core.config import settings
 from app.models import Device
+from app.services import lora_daemon_client
+from app.services.lora_daemon_client import LoraDaemonError
 from app.tests.utils import create_calendar, create_group, device_payload, group_payload
 
 GROUPS_URL = f"{settings.API_V1_STR}/groups/"
@@ -242,8 +245,8 @@ def _mark_synced(session: Session, device_id: str) -> None:
     session.commit()
 
 
-def test_test_calendar_reports_in_sync_devices(
-    client: TestClient, session: Session
+def test_test_calendar_reports_live_confirmed_devices(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     group = create_group(session)
     device_a = client.post(
@@ -256,17 +259,23 @@ def test_test_calendar_reports_in_sync_devices(
         f"{GROUPS_URL}{group.uuid}/devices",
         json={"device_ids": [device_a["device_id"], device_b["device_id"]]},
     )
-    _mark_synced(session, device_a["device_id"])
-    _mark_synced(session, device_b["device_id"])
+    seen_device_ids = []
+
+    def fake_check(device_ids: list[str], **_kwargs) -> dict:
+        seen_device_ids.extend(device_ids)
+        return {"results": dict.fromkeys(device_ids, True)}
+
+    monkeypatch.setattr(lora_daemon_client, "check_config_sync", fake_check)
 
     response = client.post(f"{GROUPS_URL}{group.uuid}/test-calendar")
 
     assert response.status_code == 200
-    assert response.json()["message"] == "2 lumestrio device(s) in sync"
+    assert response.json()["message"] == "2/2 lumestrio device(s) confirmed in sync"
+    assert sorted(seen_device_ids) == sorted([device_a["device_id"], device_b["device_id"]])
 
 
-def test_test_calendar_reports_pending_devices(
-    client: TestClient, session: Session
+def test_test_calendar_reports_pending_when_device_does_not_confirm(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     group = create_group(session)
     device = client.post(
@@ -276,17 +285,45 @@ def test_test_calendar_reports_pending_devices(
         f"{GROUPS_URL}{group.uuid}/devices",
         json={"device_ids": [device["device_id"]]},
     )
-    # Freshly created: config_version=1, synced_version=0 by default --
-    # never confirmed applied, so it's pending without any extra setup.
+    # The device replied, but with a version that doesn't match master's.
+    monkeypatch.setattr(
+        lora_daemon_client,
+        "check_config_sync",
+        lambda device_ids, **kwargs: {"results": {device_ids[0]: False}},
+    )
 
     response = client.post(f"{GROUPS_URL}{group.uuid}/test-calendar")
 
     assert response.status_code == 200
-    assert response.json()["message"] == "0 lumestrio device(s) in sync, 1 pending"
+    assert response.json()["message"] == "0/1 lumestrio device(s) confirmed in sync"
 
 
-def test_test_calendar_reports_relaystrio_as_skipped(
-    client: TestClient, session: Session
+def test_test_calendar_reports_pending_when_lora_daemon_unreachable(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    group = create_group(session)
+    device = client.post(
+        DEVICES_URL, json=device_payload(device_type="lumestrio", device_number=1)
+    ).json()
+    client.patch(
+        f"{GROUPS_URL}{group.uuid}/devices",
+        json={"device_ids": [device["device_id"]]},
+    )
+    _mark_synced(session, device["device_id"])  # stale local data must not be trusted
+
+    def _raise(*_args, **_kwargs) -> dict:
+        raise LoraDaemonError("connection refused")
+
+    monkeypatch.setattr(lora_daemon_client, "check_config_sync", _raise)
+
+    response = client.post(f"{GROUPS_URL}{group.uuid}/test-calendar")
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "0/1 lumestrio device(s) confirmed in sync"
+
+
+def test_test_calendar_reports_relaystrio_separately_as_presumed(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     group = create_group(session)
     lumestrio = client.post(
@@ -299,14 +336,54 @@ def test_test_calendar_reports_relaystrio_as_skipped(
         f"{GROUPS_URL}{group.uuid}/devices",
         json={"device_ids": [lumestrio["device_id"], relaystrio["device_id"]]},
     )
-    _mark_synced(session, lumestrio["device_id"])
+    _mark_synced(session, relaystrio["device_id"])
+    monkeypatch.setattr(
+        lora_daemon_client,
+        "check_config_sync",
+        lambda device_ids, **kwargs: {"results": {device_ids[0]: True}},
+    )
 
     response = client.post(f"{GROUPS_URL}{group.uuid}/test-calendar")
 
     assert response.status_code == 200
     assert response.json()["message"] == (
-        "1 lumestrio device(s) in sync, 1 relaystrio skipped (not yet supported)"
+        "1/1 lumestrio device(s) confirmed in sync, "
+        "1/1 relaystrio device(s) presumed in sync (no confirmation possible)"
     )
+
+
+def test_test_calendar_relaystrio_only_group_never_calls_lora_daemon(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    group = create_group(session)
+    relaystrio = client.post(
+        DEVICES_URL, json=device_payload(device_type="relaystrio", device_number=1)
+    ).json()
+    client.patch(
+        f"{GROUPS_URL}{group.uuid}/devices",
+        json={"device_ids": [relaystrio["device_id"]]},
+    )
+
+    def _fail(*_args, **_kwargs):
+        raise AssertionError("check_config_sync should not be called for a relaystrio-only group")
+
+    monkeypatch.setattr(lora_daemon_client, "check_config_sync", _fail)
+
+    response = client.post(f"{GROUPS_URL}{group.uuid}/test-calendar")
+
+    assert response.status_code == 200
+    assert response.json()["message"] == (
+        "0/1 relaystrio device(s) presumed in sync (no confirmation possible)"
+    )
+
+
+def test_test_calendar_empty_group(client: TestClient, session: Session) -> None:
+    group = create_group(session)
+
+    response = client.post(f"{GROUPS_URL}{group.uuid}/test-calendar")
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "no devices in this group"
 
 
 def test_test_calendar_group_not_found(client: TestClient) -> None:

@@ -47,6 +47,21 @@ def test_send_activate_sends_body() -> None:
     assert result == {"active": True, "addresses": [3]}
 
 
+def test_check_config_sync_sends_device_ids_and_returns_results() -> None:
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["body"] = request.content
+        return httpx.Response(200, json={"results": {"lumestrio3": True}})
+
+    result = client_module.check_config_sync(["lumestrio3"], client=_mock_client(handler))
+
+    assert seen["path"] == "/devices/check-config-sync"
+    assert json.loads(seen["body"]) == {"device_ids": ["lumestrio3"]}
+    assert result == {"results": {"lumestrio3": True}}
+
+
 def test_request_raises_lora_daemon_error_on_connection_failure() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("connection refused", request=request)

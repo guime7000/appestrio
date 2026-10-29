@@ -443,3 +443,218 @@ async def test_run_agenda_sync_forever_syncs_lumestrio(
     await _cancel(task)
 
     assert called == ["lumestrio3"]
+
+
+# --- check_lumestrio_config_sync -------------------------------------------
+
+
+async def test_check_lumestrio_config_sync_unknown_device(db_path: str) -> None:
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+
+    with pytest.raises(ValueError, match="unknown device_id"):
+        await orchestration.check_lumestrio_config_sync(
+            conn=conn, scheduler=scheduler, device_ids=["nosuchdevice"]
+        )
+
+
+async def test_check_lumestrio_config_sync_rejects_relaystrio(db_path: str) -> None:
+    conn = db.connect(db_path)
+    _insert_device(
+        conn,
+        device_id="relaystrio1",
+        device_type="relaystrio",
+        uuid="dev-uuid-relay",
+    )
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+
+    with pytest.raises(ValueError, match="no config_version concept"):
+        await orchestration.check_lumestrio_config_sync(
+            conn=conn, scheduler=scheduler, device_ids=["relaystrio1"]
+        )
+
+
+async def test_check_lumestrio_config_sync_empty_list(db_path: str) -> None:
+    conn = db.connect(db_path)
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+
+    result = await orchestration.check_lumestrio_config_sync(
+        conn=conn, scheduler=scheduler, device_ids=[]
+    )
+
+    assert result == {}
+
+
+async def test_check_lumestrio_config_sync_in_sync(db_path: str) -> None:
+    conn = db.connect(db_path)
+    _insert_device(conn, config_version=5, synced_version=0)
+    conn.commit()
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    device = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+
+    async def device_responder() -> None:
+        while True:
+            for frame in device.receive_all():
+                if frame and frame[0] == int(MessageType.PING):
+                    ping = decode_ping(frame)
+                    if ping.ping_type == PingType.WITH_CONFIG_VERSION:
+                        device.send(
+                            encode_pong(
+                                address=LUMESTRIO_3_ADDRESS, active=True, config_version=5
+                            )
+                        )
+            await asyncio.sleep(0.01)
+
+    # check_lumestrio_config_sync relies on run_forever() already being
+    # the active transport poller -- same assumption _wait_for_missing_parts
+    # makes -- so it must be running for on_pong to ever fire.
+    ping_task = asyncio.create_task(scheduler.run_forever())
+    responder_task = asyncio.create_task(device_responder())
+    try:
+        result = await orchestration.check_lumestrio_config_sync(
+            conn=conn, scheduler=scheduler, device_ids=["lumestrio3"]
+        )
+    finally:
+        await _cancel(ping_task)
+        await _cancel(responder_task)
+
+    assert result == {"lumestrio3": True}
+    row = conn.execute(
+        "SELECT synced_version FROM devices WHERE device_id = ?", ("lumestrio3",)
+    ).fetchone()
+    assert row["synced_version"] == 5
+
+
+async def test_check_lumestrio_config_sync_reports_mismatch_and_still_reconciles(
+    db_path: str,
+) -> None:
+    conn = db.connect(db_path)
+    _insert_device(conn, config_version=5, synced_version=0)
+    conn.commit()
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    device = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+
+    async def device_responder() -> None:
+        while True:
+            for frame in device.receive_all():
+                if frame and frame[0] == int(MessageType.PING):
+                    ping = decode_ping(frame)
+                    if ping.ping_type == PingType.WITH_CONFIG_VERSION:
+                        # The device genuinely only has version 3 applied.
+                        device.send(
+                            encode_pong(
+                                address=LUMESTRIO_3_ADDRESS, active=True, config_version=3
+                            )
+                        )
+            await asyncio.sleep(0.01)
+
+    ping_task = asyncio.create_task(scheduler.run_forever())
+    responder_task = asyncio.create_task(device_responder())
+    try:
+        result = await orchestration.check_lumestrio_config_sync(
+            conn=conn, scheduler=scheduler, device_ids=["lumestrio3"]
+        )
+    finally:
+        await _cancel(ping_task)
+        await _cancel(responder_task)
+
+    assert result == {"lumestrio3": False}
+    row = conn.execute(
+        "SELECT synced_version FROM devices WHERE device_id = ?", ("lumestrio3",)
+    ).fetchone()
+    # Reconciled to the device's own honest, real value -- not master's.
+    assert row["synced_version"] == 3
+
+
+async def test_check_lumestrio_config_sync_missing_reply_stays_pending(db_path: str) -> None:
+    conn = db.connect(db_path)
+    _insert_device(conn, config_version=5, synced_version=0)
+    conn.commit()
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+
+    result = await orchestration.check_lumestrio_config_sync(
+        conn=conn, scheduler=scheduler, device_ids=["lumestrio3"]
+    )
+
+    assert result == {}
+    row = conn.execute(
+        "SELECT synced_version FROM devices WHERE device_id = ?", ("lumestrio3",)
+    ).fetchone()
+    assert row["synced_version"] == 0
+
+
+async def test_check_lumestrio_config_sync_pauses_and_resumes_scheduler(db_path: str) -> None:
+    conn = db.connect(db_path)
+    _insert_device(conn, config_version=5, synced_version=0)
+    conn.commit()
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+
+    await orchestration.check_lumestrio_config_sync(
+        conn=conn, scheduler=scheduler, device_ids=["lumestrio3"]
+    )
+
+    assert scheduler._paused is False  # resumed afterward, not left paused
+
+
+async def test_check_lumestrio_config_sync_batches_many_devices(db_path: str) -> None:
+    conn = db.connect(db_path)
+    # ping_interval_s=1 -> get_num_in_ping(1000) == 1, forcing 3 separate
+    # batches for 3 devices -- confirms the channel-pacing behavior, not
+    # just the single-device happy path.
+    conn.execute("UPDATE lora_settings SET ping_interval_s = 1 WHERE id = 1")
+    for number in (3, 4, 5):
+        _insert_device(
+            conn,
+            uuid=f"dev-uuid-{number}",
+            device_id=f"lumestrio{number}",
+            config_version=5,
+            synced_version=0,
+        )
+    conn.commit()
+    bus = LoopbackBus()
+    transport = LoopbackTransport(bus)
+    device = LoopbackTransport(bus)
+    scheduler = PingScheduler(conn=conn, transport=transport)
+    ping_frames: list[tuple] = []
+
+    async def device_responder() -> None:
+        while True:
+            for frame in device.receive_all():
+                if frame and frame[0] == int(MessageType.PING):
+                    ping = decode_ping(frame)
+                    if ping.ping_type == PingType.WITH_CONFIG_VERSION:
+                        ping_frames.append(ping.addresses)
+                        for address in ping.addresses:
+                            device.send(encode_pong(address=address, active=True, config_version=5))
+            await asyncio.sleep(0.01)
+
+    ping_task = asyncio.create_task(scheduler.run_forever())
+    responder_task = asyncio.create_task(device_responder())
+    try:
+        result = await orchestration.check_lumestrio_config_sync(
+            conn=conn,
+            scheduler=scheduler,
+            device_ids=["lumestrio3", "lumestrio4", "lumestrio5"],
+        )
+    finally:
+        await _cancel(ping_task)
+        await _cancel(responder_task)
+
+    assert result == {"lumestrio3": True, "lumestrio4": True, "lumestrio5": True}
+    # One address per PING frame -- never batched together, never overlapping.
+    assert all(len(addresses) == 1 for addresses in ping_frames)
+    assert len(ping_frames) == 3

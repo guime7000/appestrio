@@ -127,6 +127,22 @@ def get_pending_sync_devices(conn: sqlite3.Connection) -> list[PendingDevice]:
     ]
 
 
+def get_config_versions(conn: sqlite3.Connection, device_ids: list[str]) -> dict[str, int]:
+    """Master's own authoritative `config_version` for each of the given
+    devices -- what a real `WITH_CONFIG_VERSION` reply's value needs to
+    be compared against (orchestration.check_lumestrio_config_sync).
+    A `device_id` that doesn't exist is simply absent from the result.
+    """
+    if not device_ids:
+        return {}
+    placeholders = ",".join("?" for _ in device_ids)
+    rows = conn.execute(
+        f"SELECT device_id, config_version FROM devices WHERE device_id IN ({placeholders})",
+        device_ids,
+    ).fetchall()
+    return {row["device_id"]: row["config_version"] for row in rows}
+
+
 @dataclass(frozen=True)
 class IgnitionPresetRow:
     uuid: str

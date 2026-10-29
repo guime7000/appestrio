@@ -328,7 +328,7 @@ onMounted(async () => {
               :disabled="testCalendarBusyUuids.has(group.uuid)"
               @click="testCalendar(group)"
             >
-              Test calendrier
+              {{ testCalendarBusyUuids.has(group.uuid) ? "Vérification en cours…" : "Test calendrier" }}
             </button>
             <span v-if="testCalendarResults[group.uuid]" class="test-calendar-result">
               {{ testCalendarResults[group.uuid] }}
@@ -553,6 +553,10 @@ td {
   color: var(--color-muted);
   font-size: 0.85rem;
   white-space: normal;
+}
+
+.test-calendar-button:disabled {
+  color: var(--color-disabled-text);
 }
 
 .expand-toggle {

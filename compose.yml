@@ -26,6 +26,14 @@ services:
     # hardware is physically capable.
     devices:
       - /dev/snd:/dev/snd
+      # The relay that powers the audio amp (app/services/relay.py,
+      # GPIO pin 25, ported from legacy's modules/Relay.ts) -- same
+      # unconditional reasoning as /dev/snd above: one hardware kit,
+      # every Pi has GPIO. gpiozero's `lgpio` backend talks to this
+      # character device, not the older /dev/gpiomem. Pi-model-specific:
+      # this is Pi 4 and earlier's path -- a Pi 5 (whose GPIO moved
+      # behind the RP1 chip) needs /dev/gpiochip4 instead.
+      - /dev/gpiochip0:/dev/gpiochip0
     build:
       context: .
       dockerfile: Dockerfile

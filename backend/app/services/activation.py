@@ -22,13 +22,20 @@ this Pi yet (LoRa can't transmit audio bytes, only the filename
 reference), fails loud in the logs rather than crashing the caller --
 same best-effort posture as `_trigger_remote_activate`.
 
+**Relay (the audio amp's power) wired the same day**, via
+`app/services/relay.py` -- ported from legacy's `modules/Relay.ts`
+(GPIO pin 25, toggled unconditionally alongside play/stop, not driven
+by player state or acknowledged in any way -- see that module's own
+docstring). Same call order as legacy's `sendStartOrStopMessage`: audio
+first, then the relay, in both directions.
+
 DMX (`handles_dmx`) remains a logging placeholder -- out of scope here,
 real OSC/QLC+ wiring is still future work.
 """
 
 import logging
 
-from app.services import audio_player
+from app.services import audio_player, relay
 from app.services.audio_player import AudioPlayerError
 
 logger = logging.getLogger(__name__)
@@ -47,6 +54,7 @@ def _start_audio_playback(device_id: str, audiofile: str | None) -> None:
         audio_player.play()
     except AudioPlayerError as exc:
         logger.warning("%s: couldn't start audio playback: %s", device_id, exc)
+    relay.activate(True)
 
 
 def apply_active_state(
@@ -69,6 +77,7 @@ def apply_active_state(
             logger.info("[placeholder] %s: would stop DMX show", device_id)
         if handles_audio:
             audio_player.stop()
+            relay.activate(False)
         if not handles_dmx and not handles_audio:
             logger.info(
                 "[placeholder] %s: deactivated, but handles neither audio nor DMX", device_id

@@ -47,6 +47,19 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=backend/pyproject.toml,target=pyproject.toml \
     uv sync --frozen --package app
 
+# `lgpio` -- the gpiozero backend app/services/relay.py actually drives
+# the GPIO relay through -- has no prebuilt wheel for any platform (it's
+# a thin SWIG-generated C wrapper), so it can't go through the normal
+# `uv sync`/uv.lock path without making `swig` a hard requirement for
+# every dev machine and CI run that just wants to run the test suite
+# (none of which ever construct a real GPIO device -- relay.py's tests
+# mock `_make_device`). Installed here instead, straight into the
+# already-synced venv, isolated to this one build stage where `swig`
+# is cheap to add and thrown away immediately after.
+RUN apt-get update && apt-get install -y --no-install-recommends swig gcc python3-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && uv pip install --python /app/.venv/bin/python lgpio
+
 
 FROM python:3.14-slim
 

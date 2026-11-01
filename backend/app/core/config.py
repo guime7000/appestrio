@@ -75,6 +75,13 @@ class Settings(BaseSettings):
     AUDIO_STATE_PATH: str = "audio_player_state.json"
     AUDIO_MAX_UPLOAD_BYTES: int = 50 * 1024 * 1024
 
+    # GPIO pin powering the relay that switches the audio amp -- ported
+    # from legacy's `modules/Relay.ts` (pigpio, GPIO 25), see
+    # app/services/relay.py. Same pin on every device by convention
+    # (one hardware kit, confirmed 2026-10-30 for the sound card; GPIO
+    # pins are physically present on every Pi regardless).
+    AUDIO_RELAY_GPIO_PIN: int = 25
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:

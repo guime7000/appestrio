@@ -1,10 +1,79 @@
+from pathlib import Path
+
+import pytest
+
+from app.core.config import settings
+from app.services import audio_player
 from app.services.activation import apply_active_state
+from app.services.audio_player import AudioPlayerError
 
 
-def test_apply_active_state_audio_device_activates_without_raising() -> None:
+@pytest.fixture(autouse=True)
+def _isolate_audio_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "AUDIO_DIR", str(tmp_path / "audio"))
+    monkeypatch.setattr(settings, "AUDIO_STATE_PATH", str(tmp_path / "state.json"))
+    audio_player._process = None
+
+
+def test_apply_active_state_audio_device_plays_the_configured_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[str | None] = []
+    monkeypatch.setattr(audio_player, "play", lambda: seen.append("played"))
+
     apply_active_state(
         device_id="lumestrio3", active=True, handles_audio=True, handles_dmx=False, audiofile="x.mp3"
     )
+
+    assert seen == ["played"]
+    assert audio_player.load_state()["audiofile"] == "x.mp3"
+
+
+def test_apply_active_state_audio_device_preserves_local_volume_and_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    audio_player.save_state(volume=42, audiofile="old.mp3", test_audiofile="test/tone.mp3", loop=True)
+    monkeypatch.setattr(audio_player, "play", lambda: None)
+
+    apply_active_state(
+        device_id="lumestrio3", active=True, handles_audio=True, handles_dmx=False, audiofile="new.mp3"
+    )
+
+    assert audio_player.load_state() == {
+        "volume": 42,
+        "audiofile": "new.mp3",
+        "test_audiofile": "test/tone.mp3",
+        "loop": True,
+    }
+
+
+def test_apply_active_state_audio_device_survives_playback_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _raise() -> None:
+        raise AudioPlayerError("no audio device")
+
+    monkeypatch.setattr(audio_player, "play", _raise)
+
+    apply_active_state(
+        device_id="lumestrio3", active=True, handles_audio=True, handles_dmx=False, audiofile="x.mp3"
+    )  # must not raise
+
+
+def test_apply_active_state_audio_device_without_configured_file_still_tries_to_play(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[str] = []
+    monkeypatch.setattr(audio_player, "play", lambda: seen.append("played"))
+
+    apply_active_state(
+        device_id="lumestrio3", active=True, handles_audio=True, handles_dmx=False, audiofile=None
+    )
+
+    assert seen == ["played"]
+    # No `audiofile` provided -- whatever was already persisted (nothing,
+    # here) is left alone rather than being overwritten with None.
+    assert audio_player.load_state()["audiofile"] is None
 
 
 def test_apply_active_state_dmx_device_activates_without_raising() -> None:
@@ -15,5 +84,16 @@ def test_apply_active_state_plain_device_activates_without_raising() -> None:
     apply_active_state(device_id="relaystrio5", active=True, handles_audio=False, handles_dmx=False)
 
 
-def test_apply_active_state_deactivates_without_raising() -> None:
+def test_apply_active_state_deactivates_stops_audio_playback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[str] = []
+    monkeypatch.setattr(audio_player, "stop", lambda: seen.append("stopped"))
+
     apply_active_state(device_id="lumestrio3", active=False, handles_audio=True, handles_dmx=True)
+
+    assert seen == ["stopped"]
+
+
+def test_apply_active_state_deactivates_plain_device_without_raising() -> None:
+    apply_active_state(device_id="relaystrio5", active=False, handles_audio=False, handles_dmx=False)

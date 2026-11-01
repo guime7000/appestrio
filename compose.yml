@@ -9,8 +9,23 @@ services:
       - .env
     environment:
       - SQLITE_PATH=/app/data/appestrio.db
+      # Audio page uploads + the last-set volume/file (app/services/
+      # audio_player.py) -- under the same persistent volume as the
+      # sqlite file so they survive a container restart.
+      - AUDIO_DIR=/app/data/audio
+      - AUDIO_STATE_PATH=/app/data/audio_player_state.json
     volumes:
       - app-db-data:/app/data
+    # mpv (app/services/audio_player.py) needs the host's sound card to
+    # actually produce audio. Unconditional, unlike lora-daemon's
+    # /dev/rtc0 below needing a device-tree overlay first: every
+    # deployed Pi (master and every lumestrio) is the same hardware kit
+    # and always has a sound card wired up (confirmed 2026-10-30) --
+    # `handles_audio` only gates whether a device is *configured* to use
+    # it in the actual show, a software/config decision, not whether the
+    # hardware is physically capable.
+    devices:
+      - /dev/snd:/dev/snd
     build:
       context: .
       dockerfile: Dockerfile

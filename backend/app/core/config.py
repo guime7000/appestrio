@@ -65,6 +65,16 @@ class Settings(BaseSettings):
     # item 9).
     IS_MASTER: bool = False
 
+    # Local mpv playback control + file upload for the Audio page (a
+    # manual config/testing tool for `handles_audio` devices -- see
+    # app/services/audio_player.py). Relative defaults for local dev,
+    # same convention as SQLITE_PATH; overridden to live under the
+    # persistent /app/data volume in compose.yml so uploads and the
+    # last-set volume survive a container restart.
+    AUDIO_DIR: str = "audio"
+    AUDIO_STATE_PATH: str = "audio_player_state.json"
+    AUDIO_MAX_UPLOAD_BYTES: int = 50 * 1024 * 1024
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:

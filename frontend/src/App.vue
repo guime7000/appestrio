@@ -2,16 +2,20 @@
 import { computed, onMounted } from "vue";
 
 import { useTheme } from "@/composables/useTheme";
+import { useAudioStore } from "@/stores/audio";
 import { useWhoAmIStore } from "@/stores/whoami";
 
 const whoami = useWhoAmIStore();
+const audio = useAudioStore();
 onMounted(() => {
   whoami.load();
+  audio.load();
 });
 
 const navLinks = computed(() => [
   { to: "/", label: "Inauguration" },
   ...(whoami.isMaster ? [{ to: "/configuration", label: "Configuration" }] : []),
+  ...(audio.handlesAudio ? [{ to: "/audio", label: "Audio" }] : []),
 ]);
 
 const { theme, toggleTheme } = useTheme();

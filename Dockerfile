@@ -52,6 +52,15 @@ FROM python:3.14-slim
 
 ENV PYTHONUNBUFFERED=1
 
+# mpv for the Audio page's playback (app/services/audio_player.py) --
+# installed on every device's backend image (same image runs on master
+# and every lumestrio) even though only `handles_audio` devices ever
+# use it; no sound hardware needed to install the binary itself, only
+# to actually produce sound at runtime (see compose.yml's /dev/snd
+# comment).
+RUN apt-get update && apt-get install -y --no-install-recommends mpv \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app/
 
 # Place executables in the environment at the front of the path

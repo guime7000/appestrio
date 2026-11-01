@@ -1,0 +1,36 @@
+services:
+
+  # Opt-in overlay for a `handles_dmx` device only -- NOT auto-merged
+  # like compose.override.yml (dev-only, picked up by name just because
+  # of it). Pass this explicitly, on top of the base file, only on the
+  # specific Pi(s) that actually need lighting control:
+  #
+  #   docker compose -f compose.yml -f compose.dmx.yml \
+  #     --env-file .env.pi up -d --build
+  #
+  # Unlike mpv/the GPIO relay (compose.yml's own /dev/snd and
+  # /dev/gpiochip0, unconditional because every device has that
+  # hardware), a DMX interface (USB-DMX dongle, etc.) is NOT present on
+  # every device in this fleet -- confirmed 2026-11-01 -- so this stays
+  # opt-in rather than baked into the base file.
+  qlcplus:
+    build:
+      context: ./qlcplus
+    restart: always
+    ports:
+      # Reached directly by the browser on this port (App.vue's "QLC+"
+      # nav link, gated by `handles_dmx` via GET /dmx/status) -- not
+      # proxied through `backend`, same model as lora-daemon's own
+      # hardware test console sitting directly on 8765.
+      - "9999:9999"
+    volumes:
+      # QLC+'s own workspace (.qxw) and settings, so a lighting setup
+      # survives a container restart.
+      - qlcplus-data:/QLC
+    # Add a real DMX interface's device node here once one is wired up
+    # on this specific Pi, e.g.:
+    #   devices:
+    #     - /dev/ttyUSB0:/dev/ttyUSB0
+
+volumes:
+  qlcplus-data:

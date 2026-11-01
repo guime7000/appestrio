@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE FixtureDefinition>
+<FixtureDefinition xmlns="http://www.qlcplus.org/FixtureDefinition">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>5.2.2</Version>
+  <Author>jules</Author>
+ </Creator>
+ <Manufacturer>Yuer</Manufacturer>
+ <Model>Lyre Wash IP65</Model>
+ <Type>Moving Head</Type>
+ <Channel Name="Light flash - STROBE" Default="21">
+  <Group Byte="0">Shutter</Group>
+  <Capability Min="0" Max="19">OFF DIMMER</Capability>
+  <Capability Min="20" Max="49">ON DIMMER</Capability>
+  <Capability Min="50" Max="200">STROBE - SLOW TO FAST</Capability>
+  <Capability Min="201" Max="209">ON DIMMER</Capability>
+  <Capability Min="210" Max="255">RANDOM BLINK</Capability>
+ </Channel>
+ <Channel Name="DIMMER" Preset="IntensityMasterDimmer"/>
+ <Channel Name="DIMMER FINE" Preset="IntensityMasterDimmerFine"/>
+ <Channel Name="RED" Preset="IntensityRed"/>
+ <Channel Name="RED FINE" Preset="IntensityRedFine"/>
+ <Channel Name="GREEN" Preset="IntensityGreen"/>
+ <Channel Name="GREEN FINE" Preset="IntensityGreenFine"/>
+ <Channel Name="BLUE" Preset="IntensityBlue"/>
+ <Channel Name="BLUE FINE" Preset="IntensityBlueFine"/>
+ <Channel Name="TEMP COULEUR " Preset="ColorCTCMixer"/>
+ <Channel Name="COLOR MACRO" Preset="ColorMacro"/>
+ <Channel Name="ZOOM" Preset="BeamFocusFarNear"/>
+ <Channel Name="PAN" Preset="PositionPan"/>
+ <Channel Name="PAN FINE" Preset="PositionPanFine"/>
+ <Channel Name="TILT" Preset="PositionTilt"/>
+ <Channel Name="TILT FINE" Preset="PositionTiltFine"/>
+ <Channel Name="MACRO - Pos Reset">
+  <Group Byte="0">Maintenance</Group>
+  <Capability Min="0" Max="25" Preset="ResetPanTilt">Non fuctionnal</Capability>
+  <Capability Min="26" Max="76">Head reset in 5sec</Capability>
+  <Capability Min="77" Max="127">XY reset valid for 5sec</Capability>
+  <Capability Min="128" Max="255">All resets are valid for 5sec</Capability>
+ </Channel>
+ <Channel Name="WHITE" Preset="IntensityWhite"/>
+ <Channel Name="WHITE FINE" Preset="IntensityWhiteFine"/>
+ <Channel Name="EFFECT - A REFAIRE SI BESOIN" Preset="NoFunction"/>
+ <Channel Name="EFFECT SPEED">
+  <Group Byte="0">Speed</Group>
+  <Capability Min="0" Max="63" Preset="RotationStop">FREEZE</Capability>
+  <Capability Min="64" Max="158" Preset="RotationCounterClockwiseFastToSlow">ROTA EFFETS SENS ANTIHORAIRE</Capability>
+  <Capability Min="159" Max="160" Preset="RotationStop">FREEZE</Capability>
+  <Capability Min="161" Max="255" Preset="RotationClockwiseSlowToFast">ROTA EFFETS SENS HORAIRE</Capability>
+ </Channel>
+ <Channel Name="FADE EFFECT">
+  <Group Byte="0">Intensity</Group>
+  <Capability Min="0" Max="255" Preset="FastToSlow">EFFECT FADED</Capability>
+ </Channel>
+ <Channel Name="STROBE HALO" Preset="ShutterStrobeSlowFast"/>
+ <Channel Name="DIMMER HALO" Preset="IntensityDimmer"/>
+ <Channel Name="MIX RGB - GELATES A FINIR" Default="203">
+  <Group Byte="0">Intensity</Group>
+  <Capability Min="0" Max="9">Open. Enable RGBW color mixing</Capability>
+  <Capability Min="10" Max="14">LEE 790-Moroccan Pink</Capability>
+  <Capability Min="15" Max="19">LEE 157-Pink</Capability>
+  <Capability Min="20" Max="24">LEE 332-Special Rose Pink</Capability>
+  <Capability Min="25" Max="29">LEE 328-Fool's Powder</Capability>
+  <Capability Min="30" Max="34">LEE 345-Purple Pink</Capability>
+  <Capability Min="35" Max="39">LEE 194-Surprise Pink</Capability>
+  <Capability Min="40" Max="44">LEE 181-Congo Blue</Capability>
+  <Capability Min="45" Max="49">LEE 071-Tokyo Blue</Capability>
+  <Capability Min="50" Max="54">LEE 120-Dark Blue</Capability>
+  <Capability Min="55" Max="59">LEE 079-Blue</Capability>
+  <Capability Min="60" Max="64">LEE 132-Medium Blue</Capability>
+  <Capability Min="65" Max="69">LEE 200-Double CT Blue</Capability>
+  <Capability Min="70" Max="74">LEE 161-Slate Blue</Capability>
+  <Capability Min="75" Max="79">LEE 201-Full CT Blue</Capability>
+  <Capability Min="80" Max="84">LEE 202-Half CT Blue</Capability>
+  <Capability Min="85" Max="89">LEE 117-Steel Blue</Capability>
+  <Capability Min="90" Max="94">LEE 353-Light Blue</Capability>
+  <Capability Min="95" Max="99">LEE 118-Light Blue</Capability>
+  <Capability Min="100" Max="104">LEE 116-Medium Blue Green</Capability>
+  <Capability Min="105" Max="109">LEE 124-Dark Green</Capability>
+  <Capability Min="110" Max="114">LEE 139-Light green</Capability>
+  <Capability Min="115" Max="119">LEE 089-Moss Green</Capability>
+  <Capability Min="120" Max="124">LEE 122-Fern Green</Capability>
+  <Capability Min="125" Max="129">LEE 738-JAS Green</Capability>
+  <Capability Min="130" Max="134">LEE 088-Lemon Green</Capability>
+  <Capability Min="135" Max="139">LEE 100-Spring Yellow</Capability>
+  <Capability Min="140" Max="144">LEE 104-Dark Amber</Capability>
+  <Capability Min="145" Max="149">LEE 179-Chrome Orange</Capability>
+  <Capability Min="150" Max="154">LEE 105- Orange</Capability>
+  <Capability Min="155" Max="159">LEE 021-Golden Amber</Capability>
+  <Capability Min="160" Max="164">LEE 778-Thousand Gold</Capability>
+  <Capability Min="165" Max="169">LEE 135-Dark Gold Amber</Capability>
+  <Capability Min="170" Max="174">LEE 164-Flame Red</Capability>
+  <Capability Min="175" Max="179">open</Capability>
+  <Capability Min="180" Max="201">Clockwise, slow to fast</Capability>
+  <Capability Min="202" Max="207">cease</Capability>
+  <Capability Min="208" Max="229">Counterclockwise, slow to fast</Capability>
+  <Capability Min="230" Max="234">open</Capability>
+  <Capability Min="235" Max="239">Random Quick</Capability>
+  <Capability Min="240" Max="244">Random medium speed</Capability>
+  <Capability Min="245" Max="249">Random slow</Capability>
+  <Capability Min="250" Max="254">open</Capability>
+ </Channel>
+ <Channel Name="RED HALO" Preset="IntensityRed"/>
+ <Channel Name="GREEN HALO" Preset="IntensityGreen"/>
+ <Channel Name="BLUE HALO" Preset="IntensityBlue"/>
+ <Channel Name="HALO EFFECT " Default="1">
+  <Group Byte="0">Intensity</Group>
+  <Capability Min="0" Max="7">OFF</Capability>
+  <Capability Min="8" Max="255">EFFETS HALO</Capability>
+ </Channel>
+ <Channel Name="HALO EFFECT SPEED">
+  <Group Byte="0">Speed</Group>
+  <Capability Min="0" Max="255" Preset="FastToSlow">FAST TO SLOW</Capability>
+ </Channel>
+ <Channel Name="RED HALO 1 APERTURE" Preset="IntensityRed"/>
+ <Channel Name="GREEN HALO 1 APERTURE" Preset="IntensityGreen"/>
+ <Channel Name="BLUE HALO 1 APERTURE" Preset="IntensityBlue"/>
+ <Channel Name="RED HALO 2 APERTURE" Preset="IntensityRed"/>
+ <Channel Name="GREEN HALO 2 APERTURE" Preset="IntensityGreen"/>
+ <Channel Name="BLUE HALO 2 APERTURE" Preset="IntensityBlue"/>
+ <Channel Name="RED HALO 3 APERTURE" Preset="IntensityRed"/>
+ <Channel Name="GREEN HALO 3 APERTURE" Preset="IntensityGreen"/>
+ <Channel Name="BLUE HALO 3 APERTURE" Preset="IntensityBlue"/>
+ <Channel Name="LED STRIP STROBE" Preset="ShutterStrobeSlowFast"/>
+ <Channel Name="LED STRIP DIMMER" Preset="IntensityDimmer"/>
+ <Channel Name="RED LED STRIP" Preset="IntensityRed"/>
+ <Channel Name="GREEN LED STRIP" Preset="IntensityGreen"/>
+ <Channel Name="BLUE LED STRIP" Preset="IntensityBlue"/>
+ <Channel Name="LED STRIP EFFET" Preset="NoFunction"/>
+ <Channel Name="LED STRIP SPEED EFFET" Preset="NoFunction"/>
+ <Channel Name="LIGHT FLASH - STROBE 2">
+  <Group Byte="0">Shutter</Group>
+  <Capability Min="0" Max="19">OFF DIMMER</Capability>
+  <Capability Min="20" Max="24">ON DIMMER</Capability>
+  <Capability Min="25" Max="64">FLASH 1 - FAST TO SLOW</Capability>
+  <Capability Min="65" Max="69">OPEN</Capability>
+  <Capability Min="70" Max="84">FLASH 2 - ON PULSE</Capability>
+  <Capability Min="85" Max="89">OPEN</Capability>
+  <Capability Min="90" Max="104">FLASH 3 - OFF PULSE</Capability>
+  <Capability Min="105" Max="109">OPEN</Capability>
+  <Capability Min="110" Max="124">FLASH 4 - RANDOM PULSE</Capability>
+  <Capability Min="125" Max="129">OPEN</Capability>
+  <Capability Min="130" Max="144">FLASH 5 - RANDOM PULSE</Capability>
+  <Capability Min="145" Max="145">OPEN</Capability>
+  <Capability Min="150" Max="164">FLASH 6 - RANDOM PULSE SHUTDOWN</Capability>
+  <Capability Min="165" Max="169">OPEN</Capability>
+  <Capability Min="170" Max="184">STROBE 7 - SUDDEN PULSE</Capability>
+  <Capability Min="185" Max="189">OPEN</Capability>
+  <Capability Min="190" Max="204">FLASH 8 - RANDOM BURST PULSES</Capability>
+  <Capability Min="205" Max="209">OPEN</Capability>
+  <Capability Min="210" Max="224">FLASH 9 - SINE WAVE</Capability>
+  <Capability Min="225" Max="229">OPEN</Capability>
+  <Capability Min="230" Max="244">SHUTTER 10 - CONTIN SHOOT</Capability>
+  <Capability Min="245" Max="255">OPEN</Capability>
+ </Channel>
+ <Mode Name="Mode 17ch">
+  <Channel Number="0">Light flash - STROBE</Channel>
+  <Channel Number="1">DIMMER</Channel>
+  <Channel Number="2">DIMMER FINE</Channel>
+  <Channel Number="3">RED</Channel>
+  <Channel Number="4">RED FINE</Channel>
+  <Channel Number="5">GREEN</Channel>
+  <Channel Number="6">GREEN FINE</Channel>
+  <Channel Number="7">BLUE</Channel>
+  <Channel Number="8">BLUE FINE</Channel>
+  <Channel Number="9">TEMP COULEUR </Channel>
+  <Channel Number="10">COLOR MACRO</Channel>
+  <Channel Number="11">ZOOM</Channel>
+  <Channel Number="12">PAN</Channel>
+  <Channel Number="13">PAN FINE</Channel>
+  <Channel Number="14">TILT</Channel>
+  <Channel Number="15">TILT FINE</Channel>
+  <Channel Number="16">MACRO - Pos Reset</Channel>
+ </Mode>
+ <Mode Name="Mode 46ch">
+  <Channel Number="0">LIGHT FLASH - STROBE 2</Channel>
+  <Channel Number="1">DIMMER</Channel>
+  <Channel Number="2">DIMMER FINE</Channel>
+  <Channel Number="3">ZOOM</Channel>
+  <Channel Number="4">PAN</Channel>
+  <Channel Number="5">PAN FINE</Channel>
+  <Channel Number="6">TILT</Channel>
+  <Channel Number="7">TILT FINE</Channel>
+  <Channel Number="8">MACRO - Pos Reset</Channel>
+  <Channel Number="9">COLOR MACRO</Channel>
+  <Channel Number="10">RED</Channel>
+  <Channel Number="11">RED FINE</Channel>
+  <Channel Number="12">GREEN</Channel>
+  <Channel Number="13">GREEN FINE</Channel>
+  <Channel Number="14">BLUE</Channel>
+  <Channel Number="15">BLUE FINE</Channel>
+  <Channel Number="16">WHITE</Channel>
+  <Channel Number="17">WHITE FINE</Channel>
+  <Channel Number="18">TEMP COULEUR </Channel>
+  <Channel Number="19">EFFECT - A REFAIRE SI BESOIN</Channel>
+  <Channel Number="20">EFFECT SPEED</Channel>
+  <Channel Number="21">FADE EFFECT</Channel>
+  <Channel Number="22">STROBE HALO</Channel>
+  <Channel Number="23">DIMMER HALO</Channel>
+  <Channel Number="24">MIX RGB - GELATES A FINIR</Channel>
+  <Channel Number="25">RED HALO</Channel>
+  <Channel Number="26">GREEN HALO</Channel>
+  <Channel Number="27">BLUE HALO</Channel>
+  <Channel Number="28">HALO EFFECT </Channel>
+  <Channel Number="29">HALO EFFECT SPEED</Channel>
+  <Channel Number="30">RED HALO 1 APERTURE</Channel>
+  <Channel Number="31">GREEN HALO 1 APERTURE</Channel>
+  <Channel Number="32">BLUE HALO 1 APERTURE</Channel>
+  <Channel Number="33">RED HALO 2 APERTURE</Channel>
+  <Channel Number="34">GREEN HALO 2 APERTURE</Channel>
+  <Channel Number="35">BLUE HALO 2 APERTURE</Channel>
+  <Channel Number="36">RED HALO 3 APERTURE</Channel>
+  <Channel Number="37">GREEN HALO 3 APERTURE</Channel>
+  <Channel Number="38">BLUE HALO 3 APERTURE</Channel>
+  <Channel Number="39">LED STRIP STROBE</Channel>
+  <Channel Number="40">LED STRIP DIMMER</Channel>
+  <Channel Number="41">RED LED STRIP</Channel>
+  <Channel Number="42">GREEN LED STRIP</Channel>
+  <Channel Number="43">BLUE LED STRIP</Channel>
+  <Channel Number="44">LED STRIP EFFET</Channel>
+  <Channel Number="45">LED STRIP SPEED EFFET</Channel>
+  <Head>
+   <Channel>0</Channel>
+   <Channel>1</Channel>
+   <Channel>2</Channel>
+   <Channel>3</Channel>
+   <Channel>4</Channel>
+   <Channel>5</Channel>
+   <Channel>6</Channel>
+   <Channel>7</Channel>
+   <Channel>8</Channel>
+   <Channel>9</Channel>
+   <Channel>10</Channel>
+   <Channel>11</Channel>
+   <Channel>12</Channel>
+   <Channel>13</Channel>
+   <Channel>14</Channel>
+   <Channel>15</Channel>
+   <Channel>16</Channel>
+   <Channel>17</Channel>
+   <Channel>18</Channel>
+   <Channel>19</Channel>
+   <Channel>20</Channel>
+   <Channel>21</Channel>
+   <Channel>22</Channel>
+   <Channel>23</Channel>
+   <Channel>24</Channel>
+   <Channel>25</Channel>
+   <Channel>26</Channel>
+   <Channel>27</Channel>
+   <Channel>28</Channel>
+   <Channel>29</Channel>
+   <Channel>30</Channel>
+   <Channel>31</Channel>
+   <Channel>32</Channel>
+   <Channel>33</Channel>
+   <Channel>34</Channel>
+   <Channel>35</Channel>
+   <Channel>36</Channel>
+   <Channel>37</Channel>
+   <Channel>38</Channel>
+   <Channel>39</Channel>
+   <Channel>40</Channel>
+   <Channel>41</Channel>
+   <Channel>42</Channel>
+   <Channel>43</Channel>
+   <Channel>44</Channel>
+   <Channel>45</Channel>
+  </Head>
+ </Mode>
+ <Physical>
+  <Bulb Type="" Lumens="0" ColourTemperature="0"/>
+  <Dimensions Weight="0" Width="0" Height="0" Depth="0"/>
+  <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>
+  <Focus Type="Head" PanMax="0" TiltMax="0"/>
+  <Technical PowerConsumption="760" DmxConnector="3-pin"/>
+ </Physical>
+</FixtureDefinition>

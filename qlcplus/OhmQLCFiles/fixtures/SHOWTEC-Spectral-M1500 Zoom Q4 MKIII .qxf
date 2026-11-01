@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE FixtureDefinition>
+<FixtureDefinition xmlns="http://www.qlcplus.org/FixtureDefinition">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>5.2.2</Version>
+  <Author>Ohm</Author>
+ </Creator>
+ <Manufacturer>SHOWTEC</Manufacturer>
+ <Model>Spectral M1500 Zoom Q4 MKIII </Model>
+ <Type>Color Changer</Type>
+ <Channel Name="DIMMER Instensity " Preset="IntensityMasterDimmer"/>
+ <Channel Name="RED" Preset="IntensityRed"/>
+ <Channel Name="GREEN" Preset="IntensityGreen"/>
+ <Channel Name="BLUE" Preset="IntensityBlue"/>
+ <Channel Name="WHITE" Preset="IntensityWhite"/>
+ <Channel Name="STROBE" Preset="ShutterStrobeSlowFast"/>
+ <Channel Name="HUE color variation">
+  <Group Byte="0">Colour</Group>
+  <Capability Min="0" Max="255" Preset="ColorDoubleMacro">HUE VARIATION</Capability>
+ </Channel>
+ <Channel Name="RED SATURATION" Preset="IntensitySaturation"/>
+ <Channel Name="ZOOM" Preset="BeamZoomSmallBig"/>
+ <Channel Name="ZOOM RESET">
+  <Group Byte="0">Beam</Group>
+  <Capability Min="0" Max="255" Preset="ResetZoom">RESET ZOOM</Capability>
+ </Channel>
+ <Channel Name="DIMMER FINE" Preset="IntensityMasterDimmerFine"/>
+ <Channel Name="RED FINE" Preset="IntensityRedFine"/>
+ <Channel Name="GREEN FINE" Preset="IntensityGreenFine"/>
+ <Channel Name="BLUE FINE" Preset="IntensityBlueFine"/>
+ <Channel Name="WHITE FINE" Preset="IntensityWhiteFine"/>
+ <Channel Name="RED 2 OUTER CIRCLE" Preset="IntensityRed"/>
+ <Channel Name="RED 2 OUTER CIRCLE FINE" Preset="IntensityRedFine"/>
+ <Channel Name="GREEN 2 OUTER CIRCLE " Preset="IntensityGreen"/>
+ <Channel Name="GREEN 2 OUTER CIRCLE FINE" Preset="IntensityGreenFine"/>
+ <Channel Name="BLUE OUTER CIRCLE" Preset="IntensityBlue"/>
+ <Channel Name="BLUE OUTER CIRCLE FINE" Preset="IntensityBlueFine"/>
+ <Channel Name="WHITE OUTER CIRCLE" Preset="IntensityWhite"/>
+ <Channel Name="WHITE OUTER CIRCLE FINE" Preset="IntensityWhiteFine"/>
+ <Channel Name="MACROS" Preset="ColorMacro"/>
+ <Channel Name="BUILT IN PROG">
+  <Group Byte="0">Effect</Group>
+  <Capability Min="0" Max="255">INTERNAL PROG</Capability>
+ </Channel>
+ <Channel Name="AUTOSPEED">
+  <Group Byte="0">Speed</Group>
+  <Capability Min="0" Max="255">AUTOSPEED</Capability>
+ </Channel>
+ <Channel Name="DIMMER SPEED">
+  <Group Byte="0">Speed</Group>
+  <Capability Min="0" Max="255" Preset="SlowToFast">DIMMER SPEED CURVE</Capability>
+ </Channel>
+ <Mode Name="ARC 1">
+  <Channel Number="0">RED</Channel>
+  <Channel Number="1">GREEN</Channel>
+  <Channel Number="2">BLUE</Channel>
+ </Mode>
+ <Mode Name="AR1.D">
+  <Channel Number="0">DIMMER Instensity </Channel>
+  <Channel Number="1">RED</Channel>
+  <Channel Number="2">GREEN</Channel>
+  <Channel Number="3">BLUE</Channel>
+ </Mode>
+ <Mode Name="ARC.2">
+  <Channel Number="0">RED</Channel>
+  <Channel Number="1">GREEN</Channel>
+  <Channel Number="2">BLUE</Channel>
+  <Channel Number="3">WHITE</Channel>
+ </Mode>
+ <Mode Name="AR2.D">
+  <Channel Number="0">DIMMER Instensity </Channel>
+  <Channel Number="1">RED</Channel>
+  <Channel Number="2">GREEN</Channel>
+  <Channel Number="3">BLUE</Channel>
+  <Channel Number="4">WHITE</Channel>
+ </Mode>
+ <Mode Name="AR2.S">
+  <Channel Number="0">DIMMER Instensity </Channel>
+  <Channel Number="1">RED</Channel>
+  <Channel Number="2">GREEN</Channel>
+  <Channel Number="3">BLUE</Channel>
+  <Channel Number="4">WHITE</Channel>
+  <Channel Number="5">STROBE</Channel>
+ </Mode>
+ <Mode Name="HSV">
+  <Channel Number="0">RED SATURATION</Channel>
+  <Channel Number="1">HUE color variation</Channel>
+  <Channel Number="2">DIMMER Instensity </Channel>
+ </Mode>
+ <Mode Name="AR2.Z">
+  <Channel Number="0">DIMMER Instensity </Channel>
+  <Channel Number="1">RED</Channel>
+  <Channel Number="2">GREEN</Channel>
+  <Channel Number="3">BLUE</Channel>
+  <Channel Number="4">WHITE</Channel>
+  <Channel Number="5">ZOOM</Channel>
+  <Channel Number="6">ZOOM RESET</Channel>
+ </Mode>
+ <Mode Name="FULL">
+  <Channel Number="0">DIMMER Instensity </Channel>
+  <Channel Number="1">DIMMER FINE</Channel>
+  <Channel Number="2">RED</Channel>
+  <Channel Number="3">RED FINE</Channel>
+  <Channel Number="4">GREEN</Channel>
+  <Channel Number="5">GREEN FINE</Channel>
+  <Channel Number="6">BLUE</Channel>
+  <Channel Number="7">BLUE FINE</Channel>
+  <Channel Number="8">WHITE</Channel>
+  <Channel Number="9">WHITE FINE</Channel>
+  <Channel Number="10">RED 2 OUTER CIRCLE</Channel>
+  <Channel Number="11">RED 2 OUTER CIRCLE FINE</Channel>
+  <Channel Number="12">GREEN 2 OUTER CIRCLE </Channel>
+  <Channel Number="13">GREEN 2 OUTER CIRCLE FINE</Channel>
+  <Channel Number="14">BLUE OUTER CIRCLE</Channel>
+  <Channel Number="15">BLUE OUTER CIRCLE FINE</Channel>
+  <Channel Number="16">WHITE OUTER CIRCLE</Channel>
+  <Channel Number="17">WHITE OUTER CIRCLE FINE</Channel>
+  <Channel Number="18">MACROS</Channel>
+  <Channel Number="19">STROBE</Channel>
+  <Channel Number="20">BUILT IN PROG</Channel>
+  <Channel Number="21">AUTOSPEED</Channel>
+  <Channel Number="22">DIMMER SPEED</Channel>
+  <Channel Number="23">ZOOM</Channel>
+  <Channel Number="24">ZOOM RESET</Channel>
+ </Mode>
+ <Physical>
+  <Bulb Type="" Lumens="0" ColourTemperature="0"/>
+  <Dimensions Weight="0" Width="0" Height="0" Depth="0"/>
+  <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>
+  <Focus Type="Fixed" PanMax="0" TiltMax="0"/>
+  <Technical PowerConsumption="125" DmxConnector="3-pin"/>
+ </Physical>
+</FixtureDefinition>

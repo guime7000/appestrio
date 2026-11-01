@@ -24,13 +24,18 @@ services:
       # hardware test console sitting directly on 8765.
       - "9999:9999"
     volumes:
-      # QLC+'s own workspace (.qxw) and settings, so a lighting setup
-      # survives a container restart.
-      - qlcplus-data:/QLC
+      # The actual project (qlcplus.sh's entrypoint always opens
+      # /QLC/qlc.qxw) and custom fixture profiles (QLC+'s own search
+      # path for user fixtures is $HOME/.qlcplus/fixtures, i.e.
+      # /root/.qlcplus/fixtures here -- see §9.40's follow-up) --
+      # bind-mounted straight from this repo's own
+      # qlcplus/OhmQLCFiles/ rather than an opaque named volume, so the
+      # show's actual project file and fixture library are plain,
+      # editable, committable files on the host, not hidden inside
+      # Docker's volume storage.
+      - ./qlcplus/OhmQLCFiles/qlc.qxw:/QLC/qlc.qxw
+      - ./qlcplus/OhmQLCFiles/fixtures:/root/.qlcplus/fixtures
     # Add a real DMX interface's device node here once one is wired up
     # on this specific Pi, e.g.:
     #   devices:
     #     - /dev/ttyUSB0:/dev/ttyUSB0
-
-volumes:
-  qlcplus-data:

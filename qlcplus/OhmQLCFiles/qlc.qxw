@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE Workspace>
+<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="FIXANDFUNC">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>5.2.2</Version>
+  <Author>jules</Author>
+ </Creator>
+ <Engine Autostart="8">
+  <InputOutputMap>
+   <BeatGenerator BeatType="Internal" BPM="120"/>
+   <NetworkServer Type="Native" AutoStart="False" Name="QLC+_C0A8011B" Password=""/>
+   <Universe Name="Universe 1" ID="0">
+    <Output Plugin="ArtNet" Name="169.254.228.183" UID="" Line="2">
+     <PluginParameters UniverseChannels="17" outputIP="2.117.44.1" outputUni="1" transmitMode="Partial"/>
+    </Output>
+   </Universe>
+   <Universe Name="Universe 2" ID="1"/>
+   <Universe Name="Universe 3" ID="2"/>
+   <Universe Name="Universe 4" ID="3"/>
+   <Universe Name="Universe 5" ID="4"/>
+  </InputOutputMap>
+  <Fixture>
+   <Manufacturer>Yuer</Manufacturer>
+   <Model>Lyre Wash IP65</Model>
+   <Mode>Mode 17ch</Mode>
+   <ID>0</ID>
+   <Name>Lyre Wash IP65 [1]</Name>
+   <Universe>0</Universe>
+   <Address>0</Address>
+   <Channels>17</Channels>
+  </Fixture>
+  <Function ID="0" Type="Scene" Name="fenetre bleu">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="0">0,29,1,255,2,255,3,0,4,0,5,0,6,0,7,255,8,255,9,0,10,0,11,255,12,84,13,67,14,34,15,155,16,1</FixtureVal>
+  </Function>
+  <Function ID="1" Type="Scene" Name="porte violet">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="0">0,29,1,255,2,255,3,255,4,255,5,51,6,51,7,255,8,255,12,143,13,164,14,0,15,0,16,1</FixtureVal>
+  </Function>
+  <Function ID="2" Type="Show" Name="Nouveau spectacle 2">
+   <TimeDivision Type="Time" BPM="120"/>
+   <Track ID="0" Name="Piste 1" isMute="0">
+    <ShowFunction ID="8" StartTime="0" Duration="11133698" Color="#646464"/>
+   </Track>
+  </Function>
+  <Function ID="3" Type="Show" Name="Nouveau spectacle 3">
+   <TimeDivision Type="Time" BPM="120"/>
+   <Track ID="0" Name="Piste 1" isMute="0">
+    <ShowFunction ID="8" StartTime="0" Duration="11133698" Color="#646464"/>
+   </Track>
+  </Function>
+  <Function ID="6" Type="Scene" Name="rouge haut">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="0">0,29,1,255,2,255,3,255,4,255,5,0,6,0,7,0,8,0,9,0,10,0,11,255,12,0,13,0,14,69,15,54,16,1</FixtureVal>
+  </Function>
+  <Function ID="7" Type="Chaser" Name="test mvt couleur">
+   <Speed FadeIn="5000" FadeOut="5000" Duration="3000"/>
+   <Direction>Forward</Direction>
+   <RunOrder>Loop</RunOrder>
+   <SpeedModes FadeIn="Common" FadeOut="Common" Duration="PerStep"/>
+   <Step Number="0" FadeIn="5000" Hold="3000" FadeOut="5000">6</Step>
+   <Step Number="1" FadeIn="5000" Hold="3000" FadeOut="5000">1</Step>
+   <Step Number="2" FadeIn="5000" Hold="3604" FadeOut="5000">0</Step>
+  </Function>
+  <Function ID="8" Type="Show" Name="test prairie collégi">
+   <TimeDivision Type="Time" BPM="120"/>
+   <Track ID="0" Name="Piste 1" isMute="0">
+    <ShowFunction ID="7" StartTime="0" Duration="11133698" Color="#556b80"/>
+   </Track>
+  </Function>
+  <Monitor DisplayMode="0" ShowLabels="0">
+   <Font>Arial,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1</Font>
+   <ChannelStyle>0</ChannelStyle>
+   <ValueStyle>0</ValueStyle>
+   <Grid Width="5" Height="3" Depth="5" Units="0" POV="2"/>
+   <StageItem>0</StageItem>
+   <FxItem ID="0" XPos="2308.1" YPos="1897.33" ZPos="1000"/>
+  </Monitor>
+ </Engine>
+ <VirtualConsole>
+  <Frame Caption="Page 1" ID="0">
+   <Appearance>
+    <Font>Roboto Condensed,16,-1,5,400,0,0,0,0,0,0,0,0,0,0,1</Font>
+   </Appearance>
+   <WindowState Visible="True" X="0" Y="0" Width="1920" Height="1080"/>
+   <AllowResize>False</AllowResize>
+   <ShowHeader>False</ShowHeader>
+   <ShowEnableButton>True</ShowEnableButton>
+   <Collapsed>False</Collapsed>
+   <Disabled>False</Disabled>
+  </Frame>
+  <Frame Caption="Page 2" ID="1">
+   <Appearance>
+    <Font>Roboto Condensed,16,-1,5,400,0,0,0,0,0,0,0,0,0,0,1</Font>
+   </Appearance>
+   <WindowState Visible="True" X="0" Y="0" Width="1920" Height="1080"/>
+   <AllowResize>False</AllowResize>
+   <ShowHeader>False</ShowHeader>
+   <ShowEnableButton>True</ShowEnableButton>
+   <Collapsed>False</Collapsed>
+   <Disabled>False</Disabled>
+  </Frame>
+  <Frame Caption="Page 3" ID="2">
+   <Appearance>
+    <Font>Roboto Condensed,16,-1,5,400,0,0,0,0,0,0,0,0,0,0,1</Font>
+   </Appearance>
+   <WindowState Visible="True" X="0" Y="0" Width="1920" Height="1080"/>
+   <AllowResize>False</AllowResize>
+   <ShowHeader>False</ShowHeader>
+   <ShowEnableButton>True</ShowEnableButton>
+   <Collapsed>False</Collapsed>
+   <Disabled>False</Disabled>
+  </Frame>
+  <Frame Caption="Page 4" ID="3">
+   <Appearance>
+    <Font>Roboto Condensed,16,-1,5,400,0,0,0,0,0,0,0,0,0,0,1</Font>
+   </Appearance>
+   <WindowState Visible="True" X="0" Y="0" Width="1920" Height="1080"/>
+   <AllowResize>False</AllowResize>
+   <ShowHeader>False</ShowHeader>
+   <ShowEnableButton>True</ShowEnableButton>
+   <Collapsed>False</Collapsed>
+   <Disabled>False</Disabled>
+  </Frame>
+ </VirtualConsole>
+</Workspace>

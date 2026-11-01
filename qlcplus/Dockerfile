@@ -21,16 +21,21 @@ COPY qlcplus.sh /QLC/entrypoint.sh
 COPY qtexport.sh /QLC/qt_export.sh
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends qlcplus \
+    && apt-get install -y --no-install-recommends qlcplus curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Web interface (see qlcplus.sh's `-w` flag).
+# Web interface (see qlcplus.sh's `-w` flag). `curl` above is
+# qlcplus.sh's own -- it polls this port and POSTs the project to
+# /loadProject once the server is actually up (see that script's own
+# comment for why loading it via the `-o` command-line flag at launch
+# doesn't work).
 EXPOSE 9999
 
-# QLC+'s own workspace (.qxw) and settings -- persisted via
-# compose.dmx.yml's named volume so a lighting setup survives a
-# container restart.
+# QLC+'s own workspace (.qxw) and custom fixture profiles -- bind-
+# mounted from this repo's qlcplus/OhmQLCFiles/ by compose.dmx.yml, so
+# a lighting setup is plain, editable, committable files on the host,
+# not hidden inside Docker's volume storage.
 VOLUME /QLC
 
 ENTRYPOINT ["bash", "/QLC/entrypoint.sh"]

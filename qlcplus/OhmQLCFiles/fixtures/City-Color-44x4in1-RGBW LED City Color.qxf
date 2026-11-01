@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE FixtureDefinition>
+<FixtureDefinition xmlns="http://www.qlcplus.org/FixtureDefinition">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>5.2.2</Version>
+  <Author>Ohm</Author>
+ </Creator>
+ <Manufacturer>City Color</Manufacturer>
+ <Model>44x4in1 RGBW LED City Color</Model>
+ <Type>Dimmer</Type>
+ <Channel Name="DIMMER" Preset="IntensityMasterDimmer"/>
+ <Channel Name="STROBE" Preset="ShutterStrobeSlowFast"/>
+ <Channel Name="MACRO" Preset="ColorMacro"/>
+ <Channel Name="MACRO SPEED">
+  <Group Byte="0">Speed</Group>
+  <Capability Min="0" Max="255" Preset="SlowToFast">SPEED</Capability>
+ </Channel>
+ <Channel Name="RED" Preset="IntensityRed"/>
+ <Channel Name="GREEN" Preset="IntensityGreen"/>
+ <Channel Name="BLUE" Preset="IntensityBlue"/>
+ <Channel Name="WHITE" Preset="IntensityWhite"/>
+ <Mode Name="8ch ">
+  <Channel Number="0">STROBE</Channel>
+  <Channel Number="1">DIMMER</Channel>
+  <Channel Number="2">MACRO</Channel>
+  <Channel Number="3">MACRO SPEED</Channel>
+  <Channel Number="4">RED</Channel>
+  <Channel Number="5">GREEN</Channel>
+  <Channel Number="6">BLUE</Channel>
+  <Channel Number="7">WHITE</Channel>
+ </Mode>
+ <Mode Name="4ch">
+  <Channel Number="0">RED</Channel>
+  <Channel Number="1">GREEN</Channel>
+  <Channel Number="2">BLUE</Channel>
+  <Channel Number="3">WHITE</Channel>
+ </Mode>
+ <Physical>
+  <Bulb Type="" Lumens="0" ColourTemperature="0"/>
+  <Dimensions Weight="0" Width="0" Height="0" Depth="0"/>
+  <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>
+  <Focus Type="Fixed" PanMax="0" TiltMax="0"/>
+  <Technical PowerConsumption="550" DmxConnector="3-pin"/>
+ </Physical>
+</FixtureDefinition>

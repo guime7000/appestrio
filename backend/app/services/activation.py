@@ -1,21 +1,52 @@
-"""`apply_active_state` -- the one function that would actually turn a
+"""`apply_active_state` -- the one function that actually turns a
 `lumestrio` on/off physically (OSC to QLC+ for DMX-capable devices, `mpv`
-audio playback, a relay powering the audio amp -- design settled
-2026-10-24, see Docs/To_Be_Done.md item 7). Shared by two callers that
-both just learned "this device should now be active=X": item 8's
-`ACTIVATE` handling (via the `/devices/{device_id}/activate` route below)
-and item 7's local agenda evaluator (not built yet).
+audio playback -- design settled 2026-10-24, see Docs/To_Be_Done.md
+item 7). Shared by two callers that both just learned "this device
+should now be active=X": item 8's `ACTIVATE` handling (via
+`/devices/{device_id}/activate`) and item 7's local agenda evaluator.
 
-Deliberately a logging placeholder for now -- the real OSC/mpv/relay
-infrastructure doesn't exist yet, and wiring this to real hardware is
-explicitly the last piece of this project to get built. Every other
-caller (the route, the future evaluator) should depend on this function's
-signature, not on it actually doing anything yet.
+**Audio wired to real `mpv` playback 2026-11-01**, via
+`app/services/audio_player.py` (built for the Audio config/testing page,
+2026-10-29/30) -- this is exactly the "one place the real
+`apply_active_state` implementation should read from" that module's own
+docstring already called out. `audiofile` (this device's
+master-configured show file, from the `devices` table) is written into
+`audio_player`'s own persisted state on every activation, so it stays
+the single source of truth for "which file" while `audio_player`'s own
+volume/loop calibration (set via the Audio page, no master-side
+equivalent) carries over unchanged -- the same self-healing pattern
+`active` itself already follows elsewhere in this codebase (every real
+signal overwrites local state, never just assumed). A device with no
+`audiofile` configured, or a file that hasn't actually been uploaded to
+this Pi yet (LoRa can't transmit audio bytes, only the filename
+reference), fails loud in the logs rather than crashing the caller --
+same best-effort posture as `_trigger_remote_activate`.
+
+DMX (`handles_dmx`) remains a logging placeholder -- out of scope here,
+real OSC/QLC+ wiring is still future work.
 """
 
 import logging
 
+from app.services import audio_player
+from app.services.audio_player import AudioPlayerError
+
 logger = logging.getLogger(__name__)
+
+
+def _start_audio_playback(device_id: str, audiofile: str | None) -> None:
+    if audiofile:
+        state = audio_player.load_state()
+        audio_player.save_state(
+            volume=state["volume"],
+            audiofile=audiofile,
+            test_audiofile=state["test_audiofile"],
+            loop=state["loop"],
+        )
+    try:
+        audio_player.play()
+    except AudioPlayerError as exc:
+        logger.warning("%s: couldn't start audio playback: %s", device_id, exc)
 
 
 def apply_active_state(
@@ -30,12 +61,15 @@ def apply_active_state(
         if handles_dmx:
             logger.info("[placeholder] %s: would send OSC to QLC+ to start DMX show", device_id)
         if handles_audio:
-            logger.info(
-                "[placeholder] %s: would start playback of %r via mpv and power the amp relay",
-                device_id,
-                audiofile,
-            )
+            _start_audio_playback(device_id, audiofile)
         if not handles_dmx and not handles_audio:
             logger.info("[placeholder] %s: activated, but handles neither audio nor DMX", device_id)
     else:
-        logger.info("[placeholder] %s: would stop playback/DMX and power down the amp relay", device_id)
+        if handles_dmx:
+            logger.info("[placeholder] %s: would stop DMX show", device_id)
+        if handles_audio:
+            audio_player.stop()
+        if not handles_dmx and not handles_audio:
+            logger.info(
+                "[placeholder] %s: deactivated, but handles neither audio nor DMX", device_id
+            )

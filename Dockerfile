@@ -49,14 +49,30 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # `lgpio` -- the gpiozero backend app/services/relay.py actually drives
 # the GPIO relay through -- has no prebuilt wheel for any platform (it's
-# a thin SWIG-generated C wrapper), so it can't go through the normal
-# `uv sync`/uv.lock path without making `swig` a hard requirement for
-# every dev machine and CI run that just wants to run the test suite
-# (none of which ever construct a real GPIO device -- relay.py's tests
-# mock `_make_device`). Installed here instead, straight into the
-# already-synced venv, isolated to this one build stage where `swig`
-# is cheap to add and thrown away immediately after.
-RUN apt-get update && apt-get install -y --no-install-recommends swig gcc python3-dev \
+# a thin SWIG-generated C wrapper around the C library `liblgpio`), so
+# it can't go through the normal `uv sync`/uv.lock path without making
+# `swig` a hard requirement for every dev machine and CI run that just
+# wants to run the test suite (none of which ever construct a real GPIO
+# device -- relay.py's tests mock `_make_device`). Installed here
+# instead, straight into the already-synced venv, isolated to this one
+# build stage where the build tools below are cheap to add and thrown
+# away immediately after.
+#
+# The C library itself (`liblgpio.so`) isn't packaged by Debian at all
+# (confirmed: no `liblgpio-dev` in any Debian suite) -- building the
+# Python `lgpio` package without it first fails to link
+# ("cannot find -llgpio"), the exact error that showed this gap. Built
+# from upstream source (joan2937/lg, pinned to v0.2.2 -- the version
+# the `lgpio` Python package itself is versioned against) and installed
+# to /usr/local/{lib,include} + `ldconfig`, same as its own Makefile
+# would do on a real Pi.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    swig gcc make python3-dev wget ca-certificates \
+    && wget -q https://github.com/joan2937/lg/archive/refs/tags/v0.2.2.tar.gz -O /tmp/lg.tar.gz \
+    && tar -xzf /tmp/lg.tar.gz -C /tmp \
+    && make -C /tmp/lg-0.2.2 lib \
+    && make -C /tmp/lg-0.2.2 install \
+    && rm -rf /tmp/lg* \
     && rm -rf /var/lib/apt/lists/* \
     && uv pip install --python /app/.venv/bin/python lgpio
 
@@ -86,6 +102,15 @@ COPY --from=backend-build /app/.venv /app/.venv
 COPY --from=backend-build /app/scripts /app/scripts
 COPY --from=backend-build /app/pyproject.toml /app/alembic.ini /app/
 COPY --from=backend-build /app/app /app/app
+
+# `liblgpio.so` (see the build stage's own comment) is a shared library
+# the Python `lgpio` extension dlopen()s at import time, not just link
+# time -- without it here too, `relay.py` would silently fall back to
+# "no GPIO backend available" on every real device, not just dev
+# machines/CI. `ldconfig` refreshes this stage's own linker cache
+# (COPY doesn't trigger it automatically).
+COPY --from=backend-build /usr/local/lib/liblgpio.so* /usr/local/lib/
+RUN ldconfig
 
 COPY --from=frontend-build /frontend/dist /app/static
 

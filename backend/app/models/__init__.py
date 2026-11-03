@@ -41,6 +41,7 @@ from app.models.devices import (
     PendingSyncPublic,
     address_for_device,
 )
+from app.models.dmx import DmxStatusPublic
 from app.models.groups import (
     Group,
     GroupBase,
@@ -109,6 +110,7 @@ __all__ = [
     "DeviceUpdate",
     "FreeDeviceNumbers",
     "PendingSyncPublic",
+    "DmxStatusPublic",
     "address_for_device",
     "Group",
     "GroupBase",

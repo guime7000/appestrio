@@ -182,3 +182,7 @@ export interface AudioStatusPublic {
   loop: boolean;
   playing: boolean;
 }
+
+export interface DmxStatusPublic {
+  handles_dmx: boolean;
+}

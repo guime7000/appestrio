@@ -5,6 +5,7 @@ from app.api.routes import (
     audio,
     calendars,
     devices,
+    dmx,
     groups,
     ignition_presets,
     lora_settings,
@@ -14,6 +15,7 @@ from app.api.routes import (
 api_router = APIRouter()
 api_router.include_router(agenda.router)
 api_router.include_router(audio.router)
+api_router.include_router(dmx.router)
 api_router.include_router(calendars.router)
 api_router.include_router(groups.router)
 api_router.include_router(devices.router)

@@ -82,6 +82,14 @@ class Settings(BaseSettings):
     # pins are physically present on every Pi regardless).
     AUDIO_RELAY_GPIO_PIN: int = 25
 
+    # QLC+'s own WebSocket API (app/services/dmx_player.py) -- "qlcplus"
+    # is the compose.dmx.yml service name, resolvable on the shared
+    # compose network; port 9999 is the same one the "QLC+" nav link
+    # opens in a browser (app/api/routes/dmx.py).
+    QLCPLUS_HOST: str = "qlcplus"
+    QLCPLUS_WS_PORT: int = 9999
+    QLCPLUS_WS_TIMEOUT_S: float = 3.0
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:

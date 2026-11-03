@@ -10,6 +10,21 @@ services:
     volumes:
       - ./backend/app:/app/app
     command: ["fastapi", "run", "--reload"]
+    # compose.yml's own `devices:` includes /dev/gpiochip0 for
+    # app/services/relay.py -- unconditional there because every real
+    # Pi has one, but a dev machine (this override's whole reason to
+    # exist) isn't a Pi and almost certainly has no such device node,
+    # which would otherwise make Docker refuse to start this container
+    # at all (a missing `devices:` path is fatal at container start,
+    # not a runtime no-op -- same lesson as lora-daemon's /dev/rtc0).
+    # `!override` (a Compose merge-spec tag, v2.24+) replaces the base
+    # list entirely rather than appending to it -- keeps /dev/snd
+    # (works fine on a native-Linux dev machine's own sound card) but
+    # drops /dev/gpiochip0. relay.py already degrades gracefully with
+    # no GPIO device at all (logs a warning, no-ops) if you'd rather
+    # just remove this whole key instead.
+    devices: !override
+      - /dev/snd:/dev/snd
 
   # Bind-mounts live source the same way, but there's no "--reload"
   # equivalent for this process -- restart the container after an edit

@@ -20,42 +20,18 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, UploadFile
 from sqlmodel import Session
 
-from app import crud
 from app.api.deps import SessionDep
 from app.core.config import settings
-from app.models import AudioLoopRequest, AudioStatusPublic, AudioVolumeRequest, Device
+from app.models import AudioLoopRequest, AudioStatusPublic, AudioVolumeRequest
 from app.services import audio_player
-from app.services.agenda_evaluator import resolve_own_device
 from app.services.audio_player import AudioPlayerError
+from app.services.device_identity import resolve_this_device
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/audio", tags=["audio"])
 
 ALLOWED_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac", ".m4a"}
-
-
-def _resolve_this_device(session: Session) -> Device | None:
-    """Which `devices` row IS this physical hardware -- a slave's local
-    DB only ever holds its own single row (`resolve_own_device`'s case),
-    but master's holds every device's row too, since it configures the
-    whole network from here; master is still itself exactly one
-    physical Pi, identified among its own multi-row DB the same way
-    item 9's bootstrap flags it: `is_master=True`
-    (`crud.get_master_device`). Deliberately NOT folded into
-    `agenda_evaluator.resolve_own_device` itself: master is confirmed to
-    never run its own agenda loop (2026-10-28, see that module's
-    docstring), and widening that resolver would silently reopen that
-    decision. This one is only for things that genuinely need "which
-    hardware am I" regardless of role, like this page -- master can
-    have `handles_audio` set on its own row too (it's usually also a
-    lumestrio physically), and should be able to test it from its own
-    dashboard.
-    """
-    device = resolve_own_device(session)
-    if device is not None:
-        return device
-    return crud.get_master_device(session=session)
 
 
 def _status() -> AudioStatusPublic:
@@ -77,7 +53,7 @@ def _require_audio_device(session: Session) -> None:
     meant to have an Audio page" (same `handles_audio` gate the nav link
     itself uses `/audio/status` for).
     """
-    device = _resolve_this_device(session)
+    device = resolve_this_device(session)
     if device is None:
         raise HTTPException(status_code=404, detail="This device isn't provisioned yet")
     if not device.handles_audio:
@@ -86,7 +62,7 @@ def _require_audio_device(session: Session) -> None:
 
 @router.get("/status", response_model=AudioStatusPublic)
 def get_status(session: SessionDep) -> AudioStatusPublic:
-    device = _resolve_this_device(session)
+    device = resolve_this_device(session)
     if device is None or not device.handles_audio:
         state = audio_player.load_state()
         return AudioStatusPublic(

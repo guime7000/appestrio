@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE FixtureDefinition>
+<FixtureDefinition xmlns="http://www.qlcplus.org/FixtureDefinition">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>5.2.2</Version>
+  <Author>Ohm</Author>
+ </Creator>
+ <Manufacturer>JSP</Manufacturer>
+ <Model>20X10W WATERPROOF LED WASH</Model>
+ <Type>Dimmer</Type>
+ <Channel Name="DIMMER" Preset="IntensityMasterDimmer"/>
+ <Channel Name="SHUTTER " Preset="ShutterStrobeSlowFast"/>
+ <Channel Name="RED" Preset="IntensityRed"/>
+ <Channel Name="GREEN" Preset="IntensityGreen"/>
+ <Channel Name="BLUE" Preset="IntensityBlue"/>
+ <Channel Name="WHITE" Preset="IntensityWhite"/>
+ <Channel Name="AMBER" Preset="IntensityAmber"/>
+ <Channel Name="PURPLE" Preset="IntensityIndigo"/>
+ <Channel Name="COLOR MACRO" Preset="ColorMacro"/>
+ <Channel Name="SPEED">
+  <Group Byte="0">Speed</Group>
+  <Capability Min="0" Max="255" Preset="SlowToFast">SPEED </Capability>
+ </Channel>
+ <Channel Name="COLOR TEMP" Preset="ColorMacro"/>
+ <Mode Name="8ch">
+  <Channel Number="0">DIMMER</Channel>
+  <Channel Number="1">SHUTTER </Channel>
+  <Channel Number="2">RED</Channel>
+  <Channel Number="3">GREEN</Channel>
+  <Channel Number="4">BLUE</Channel>
+  <Channel Number="5">WHITE</Channel>
+  <Channel Number="6">AMBER</Channel>
+  <Channel Number="7">PURPLE</Channel>
+ </Mode>
+ <Mode Name="11ch">
+  <Channel Number="0">DIMMER</Channel>
+  <Channel Number="1">SHUTTER </Channel>
+  <Channel Number="2">RED</Channel>
+  <Channel Number="3">GREEN</Channel>
+  <Channel Number="4">BLUE</Channel>
+  <Channel Number="5">WHITE</Channel>
+  <Channel Number="6">AMBER</Channel>
+  <Channel Number="7">PURPLE</Channel>
+  <Channel Number="8">COLOR MACRO</Channel>
+  <Channel Number="9">SPEED</Channel>
+  <Channel Number="10">COLOR TEMP</Channel>
+ </Mode>
+ <Physical>
+  <Bulb Type="" Lumens="0" ColourTemperature="0"/>
+  <Dimensions Weight="0" Width="0" Height="0" Depth="0"/>
+  <Lens Name="Other" DegreesMin="0" DegreesMax="0"/>
+  <Focus Type="Mirror" PanMax="0" TiltMax="0"/>
+  <Technical PowerConsumption="130" DmxConnector="3-pin"/>
+ </Physical>
+</FixtureDefinition>

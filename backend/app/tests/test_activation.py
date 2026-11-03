@@ -3,9 +3,10 @@ from pathlib import Path
 import pytest
 
 from app.core.config import settings
-from app.services import audio_player, relay
+from app.services import audio_player, dmx_player, relay
 from app.services.activation import apply_active_state
 from app.services.audio_player import AudioPlayerError
+from app.services.dmx_player import DmxPlayerError
 
 
 @pytest.fixture(autouse=True)
@@ -20,6 +21,13 @@ def _isolate_audio_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     # sandbox, no real GPIO) -- tests that don't care about the relay
     # call itself get a silent no-op; the ones that do override this.
     monkeypatch.setattr(relay, "activate", lambda _active: None)
+    # Real dmx_player.start_show()/stop_show() open a real network
+    # connection to "qlcplus:9999" -- not reachable in this sandbox
+    # (DmxPlayerError, handled the same way a real device with
+    # compose.dmx.yml not included would see it). Tests that care about
+    # the DMX call itself override this.
+    monkeypatch.setattr(dmx_player, "start_show", lambda: None)
+    monkeypatch.setattr(dmx_player, "stop_show", lambda: None)
 
 
 def test_apply_active_state_audio_device_plays_the_configured_file(
@@ -129,6 +137,39 @@ def test_apply_active_state_dmx_device_activates_without_raising() -> None:
     apply_active_state(device_id="lumestrio3", active=True, handles_audio=False, handles_dmx=True)
 
 
+def test_apply_active_state_dmx_device_starts_the_qlc_show(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[str] = []
+    monkeypatch.setattr(dmx_player, "start_show", lambda: seen.append("started"))
+
+    apply_active_state(device_id="lumestrio3", active=True, handles_audio=False, handles_dmx=True)
+
+    assert seen == ["started"]
+
+
+def test_apply_active_state_dmx_device_survives_qlc_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _raise() -> None:
+        raise DmxPlayerError("couldn't connect to QLC+")
+
+    monkeypatch.setattr(dmx_player, "start_show", _raise)
+
+    apply_active_state(
+        device_id="lumestrio3", active=True, handles_audio=False, handles_dmx=True
+    )  # must not raise
+
+
+def test_apply_active_state_non_dmx_device_does_not_touch_qlc(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[str] = []
+    monkeypatch.setattr(dmx_player, "start_show", lambda: seen.append("started"))
+
+    apply_active_state(device_id="lumestrio3", active=True, handles_audio=True, handles_dmx=False)
+
+    assert seen == []
+
+
 def test_apply_active_state_plain_device_activates_without_raising() -> None:
     apply_active_state(device_id="relaystrio5", active=True, handles_audio=False, handles_dmx=False)
 
@@ -140,6 +181,15 @@ def test_apply_active_state_deactivates_stops_audio_playback(
     monkeypatch.setattr(audio_player, "stop", lambda: seen.append("stopped"))
 
     apply_active_state(device_id="lumestrio3", active=False, handles_audio=True, handles_dmx=True)
+
+    assert seen == ["stopped"]
+
+
+def test_apply_active_state_deactivates_stops_the_qlc_show(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[str] = []
+    monkeypatch.setattr(dmx_player, "stop_show", lambda: seen.append("stopped"))
+
+    apply_active_state(device_id="lumestrio3", active=False, handles_audio=False, handles_dmx=True)
 
     assert seen == ["stopped"]
 

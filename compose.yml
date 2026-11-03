@@ -9,13 +9,23 @@ services:
       - .env
     environment:
       - SQLITE_PATH=/app/data/appestrio.db
-      # Audio page uploads + the last-set volume/file (app/services/
-      # audio_player.py) -- under the same persistent volume as the
-      # sqlite file so they survive a container restart.
+      # Audio page uploads (main + test files) and the persisted
+      # volume/file/loop state (app/services/audio_player.py) -- all
+      # under the one bind-mounted folder below, same fixed host path
+      # on every device (decided 2026-11-03, for fleet homogenization:
+      # a known, predictable location independent of where this repo
+      # happens to be checked out on a given Pi, not the sqlite
+      # named volume's opaque Docker-managed storage).
       - AUDIO_DIR=/app/data/audio
-      - AUDIO_STATE_PATH=/app/data/audio_player_state.json
+      - AUDIO_STATE_PATH=/app/data/audio/audio_player_state.json
     volumes:
       - app-db-data:/app/data
+      # /home/pi/OhmFiles/audio must exist on the host (Docker
+      # auto-creates a missing bind-mount *directory*, confirmed --
+      # unlike a missing device node, this is not fatal at container
+      # start) -- see Docs/Raspberry_Pi_Deployment.md for the full
+      # fleet directory layout.
+      - /home/pi/OhmFiles/audio:/app/data/audio
     # mpv (app/services/audio_player.py) needs the host's sound card to
     # actually produce audio. Unconditional, unlike lora-daemon's
     # /dev/rtc0 below needing a device-tree overlay first: every
@@ -60,15 +70,22 @@ services:
       # hardware test console sitting directly on 8765.
       - "9999:9999"
     volumes:
-      # The actual project (qlcplus.sh's entrypoint always opens
-      # /QLC/qlc.qxw) and custom fixture profiles (QLC+'s own search
-      # path for user fixtures is $HOME/.qlcplus/fixtures, i.e.
-      # /root/.qlcplus/fixtures here) -- bind-mounted straight from this
-      # repo's own qlcplus/OhmQLCFiles/ rather than an opaque named
-      # volume, so the show's actual project file and fixture library
-      # are plain, editable, committable files on the host.
-      - ./qlcplus/OhmQLCFiles/qlc.qxw:/QLC/qlc.qxw
-      - ./qlcplus/OhmQLCFiles/fixtures:/root/.qlcplus/fixtures
+      # Same fixed host path on every device as the audio folder above
+      # (decided 2026-11-03). `/home/pi/OhmFiles/qlc` is mounted as a
+      # whole *directory* (not a specific filename) -- qlcplus.sh's
+      # entrypoint searches it for its one `.qxw` file at startup and
+      # loads whichever is found, so the external partner's project
+      # keeps its own real filename (no renaming to a fixed "qlc.qxw"
+      # needed). Also sidesteps the earlier single-FILE-mount gotcha
+      # entirely: a missing bind-mount *directory* just auto-creates
+      # empty (confirmed harmless), unlike a missing *file* source,
+      # which silently became an empty directory in its place and broke
+      # loading -- no host prerequisite before the first `docker
+      # compose up` anymore. `fixtures/` (QLC+'s own search path for
+      # user fixtures, $HOME/.qlcplus/fixtures == /root/.qlcplus/fixtures
+      # here) is mounted separately at its real target path.
+      - /home/pi/OhmFiles/qlc:/QLC/project
+      - /home/pi/OhmFiles/qlc/fixtures:/root/.qlcplus/fixtures
     # Add a real DMX interface's device node here once one is wired up
     # on this specific Pi -- still NOT universal across the fleet,
     # unlike the service itself above, e.g.:

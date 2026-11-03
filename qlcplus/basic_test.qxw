@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE Workspace>
+<Workspace>
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>4.12.6</Version>
+  <Author>appestrio</Author>
+ </Creator>
+ <Engine>
+  <InputOutputMap>
+   <Universe Name="Universe 1" ID="0">
+    <Input Plugin="" Line="0" UID=""/>
+    <Output Plugin="" Line="0" UID=""/>
+   </Universe>
+  </InputOutputMap>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic Dimmer</Model>
+   <Mode>Linear Dimmer</Mode>
+   <ID>0</ID>
+   <Name>Dimmer 1</Name>
+   <Universe>0</Universe>
+   <Address>0</Address>
+   <Channels>1</Channels>
+  </Fixture>
+ </Engine>
+ <VirtualConsole>
+  <Frame>
+   <WindowState Visible="True" X="0" Y="0" Width="800" Height="600"/>
+   <Appearance>
+    <FrameStyle>None</FrameStyle>
+    <ForegroundColor>Default</ForegroundColor>
+    <BackgroundColor>Default</BackgroundColor>
+    <BackgroundImage>None</BackgroundImage>
+    <Font>Default</Font>
+   </Appearance>
+   <Slider>
+    <WindowState Visible="True" X="10" Y="10" Width="60" Height="200"/>
+    <Appearance>
+     <FrameStyle>None</FrameStyle>
+     <ForegroundColor>Default</ForegroundColor>
+     <BackgroundColor>Default</BackgroundColor>
+     <BackgroundImage>None</BackgroundImage>
+     <Font>Default</Font>
+    </Appearance>
+    <ID>0</ID>
+    <Caption>Dimmer 1</Caption>
+    <WidgetStyle>Slider</WidgetStyle>
+    <SliderMode ValueLo="0" ValueHi="255" Value="0" Clicked="0">Level</SliderMode>
+    <Level LowLimit="0" HighLimit="255" Value="255">
+     <Channel Fixture="0">0</Channel>
+    </Level>
+   </Slider>
+  </Frame>
+  <Properties>
+   <Size Width="800" Height="600"/>
+   <GrandMaster ChannelMode="Intensity" ValueMode="Reduce" SliderMode="Normal"/>
+  </Properties>
+ </VirtualConsole>
+ <SimpleDesk>
+  <Engine/>
+ </SimpleDesk>
+</Workspace>

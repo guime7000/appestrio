@@ -43,7 +43,20 @@ DEFAULT_RELAYSTRIO_RECURRING_THRESHOLD_DAYS = 2
 
 
 class LoraSettingsBase(SQLModel):
-    is_active: bool = Field(default=False)
+    # Defaults to True (changed 2026-11-04, was False) -- gates
+    # `lora-daemon`'s automatic PING loop, clock-sync broadcast loop, and
+    # config-sync loop (lora_daemon/scheduler.py, orchestration.py's
+    # run_clock_sync_forever/run_config_sync_forever). With the old
+    # `False` default, a freshly provisioned lumestrio needed a manual
+    # `PATCH /api/v1/lora-settings/` (or the Lora Settings page's toggle)
+    # before it would do anything on the LoRa network at all -- same
+    # "ship the default that needs no manual step" reasoning as
+    # DEFAULT_CHANNEL/DEFAULT_SPEED below. The *manual* triggers
+    # (`send_activate`, `send_clock_sync`) are deliberately NOT gated by
+    # this flag either way -- an explicit on-demand request always goes
+    # through regardless of this setting (see orchestration.py's own
+    # docstrings on those two functions).
+    is_active: bool = Field(default=True)
     channel: int = Field(default=DEFAULT_CHANNEL, ge=0, le=MAX_LORA_CHANNEL)
     speed: int = Field(default=DEFAULT_SPEED, ge=0, lt=NUM_AIR_DATA_RATES)
     fec: bool = Field(default=True)

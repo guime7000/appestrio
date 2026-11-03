@@ -13,7 +13,7 @@ def test_get_lora_settings_defaults(client: TestClient) -> None:
 
     assert response.status_code == 200
     content = response.json()
-    assert content["is_active"] is False
+    assert content["is_active"] is True
     # channel=0/speed=2 match relaystrio's fixed-in-firmware E32 config --
     # see app/models/lora_settings.py's comment.
     assert content["channel"] == 0

@@ -56,11 +56,19 @@ CREATE TABLE ignition_presets (
     updated_at TEXT NOT NULL DEFAULT ''
 );
 
--- Singleton row (id=1), mirroring the default row backend's own
--- migrations produce (ae5f47a6faf2_add_lora_settings_table.py, updated
--- by 81b1c47cc2a5 to match relaystrio's fixed-in-firmware channel/speed
--- rather than legacy's own software default -- see
--- app/models/lora_settings.py's comment).
+-- Singleton row (id=1). channel/speed mirror the default row backend's
+-- own migrations produce (ae5f47a6faf2_add_lora_settings_table.py,
+-- updated by 81b1c47cc2a5 to match relaystrio's fixed-in-firmware
+-- channel/speed rather than legacy's own software default -- see
+-- app/models/lora_settings.py's comment). `is_active` deliberately does
+-- NOT mirror backend's own default (flipped to True there 2026-11-04,
+-- see 753a502581ab) -- this test suite's own baseline is kept at 0/
+-- inactive on purpose, since several tests below rely on that default
+-- to exercise the "inactive" path without an explicit UPDATE (e.g.
+-- test_scheduler.py/test_orchestration.py's "defaults to False in the
+-- fixture" cases) while others explicitly UPDATE it to 1 for the
+-- "active" path -- changing this baseline would require rewriting both
+-- sides, out of scope for a production-default change.
 CREATE TABLE lora_settings (
     id INTEGER PRIMARY KEY,
     is_active INTEGER NOT NULL DEFAULT 0,

@@ -9,10 +9,11 @@ async function setAllDevicesActive(active: boolean) {
   if (busy.value) return;
   busy.value = true;
   try {
-    const { data: devices } = await devicesApi.list();
-    await Promise.all(
-      devices.map((device) => devicesApi.update(device.device_id, { active })),
-    );
+    // One real broadcasted ACTIVATE/DEACTIVATE LoRa frame (backend's
+    // POST /devices/broadcast-activate), not N per-device PATCHes --
+    // decided 2026-11-04: this page turns the whole fleet on/off
+    // together, so it should send one broadcast frame, not loop.
+    await devicesApi.broadcastActivate(active);
   } finally {
     busy.value = false;
   }

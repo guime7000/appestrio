@@ -15,6 +15,8 @@ export const devicesApi = {
   create: (payload: DeviceCreate) => api.post<DevicePublic>("/devices/", payload),
   update: (deviceId: string, payload: DeviceUpdate) =>
     api.patch<DevicePublic>(`/devices/${deviceId}`, payload),
+  broadcastActivate: (active: boolean) =>
+    api.post<{ message: string }>("/devices/broadcast-activate", { active }),
   delete: (deviceIds: string[]) =>
     api.delete<{ message: string }>("/devices/", { device_ids: deviceIds }),
   freeDeviceNumbers: () => api.get<FreeDeviceNumbers>("/devices/free_devices_id"),

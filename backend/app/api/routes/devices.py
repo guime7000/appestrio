@@ -3,6 +3,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException
 from sqlalchemy.exc import IntegrityError
+from sqlmodel import select
 
 from app import crud
 from app.api.deps import SessionDep
@@ -70,6 +71,41 @@ def get_free_devices_id(session: SessionDep) -> FreeDeviceNumbers:
 def get_pending_sync(session: SessionDep) -> PendingSyncPublic:
     devices = crud.get_devices_pending_sync(session=session)
     return PendingSyncPublic(count=len(devices), device_ids=[d.device_id for d in devices])
+
+
+@router.post("/broadcast-activate", response_model=Message)
+def broadcast_activate(session: SessionDep, payload: ActivateRequest) -> Message:
+    """The Inauguration page's "Allumer"/"Eteindre" (frontend/src/views/
+    InaugurationView.vue) -- replaced 2026-11-04's N individual
+    per-device `PATCH /devices/{id}` calls (same pattern Groupes' "Tout
+    éteindre/allumer" still uses) with this: one real **broadcast**
+    ACTIVATE/DEACTIVATE LoRa frame, since the whole fleet is meant to
+    turn on/off together here, not device-by-device.
+
+    Local DB writes mirror what each individual PATCH already did
+    (`crud.set_device_active` -- `active` is state, not config, no
+    `config_version` bump, same rule `update_device`'s own PATCH path
+    follows), just looped locally rather than one HTTP round trip per
+    device. The LoRa side is the real change: a single
+    `lora_daemon_client.send_activate(addresses=None)` call, which
+    `lora-daemon`'s own `orchestration.send_activate` already encodes as
+    one true broadcast-addressed frame (`messages.encode_activate`),
+    not a loop -- best-effort, same posture as `_trigger_remote_activate`.
+    """
+    devices = list(session.exec(select(Device)).all())
+    for device in devices:
+        crud.set_device_active(session=session, device=device, active=payload.active)
+
+    try:
+        lora_daemon_client.send_activate(payload.active, addresses=None)
+    except LoraDaemonError:
+        logger.warning(
+            "couldn't reach lora-daemon to broadcast activate=%s", payload.active
+        )
+
+    return Message(
+        message=f"broadcast activate={payload.active} applied to {len(devices)} device(s)"
+    )
 
 
 @router.get("/{device_id}", response_model=DevicePublic)

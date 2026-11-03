@@ -18,3 +18,9 @@ dist/
 
 Specifications/*
 bruno/
+
+# compose.override.yml's dev-only bind mount for the Audio page's
+# state/uploads (mirrors /home/pi/OhmFiles/audio on a real device) --
+# Docker creates this root-owned on first use, never meant to be
+# committed.
+dev-data/

@@ -7,8 +7,17 @@ services:
   # explicitly (`docker compose -f compose.yml up -d --build`) so this
   # override never applies there.
   backend:
-    volumes:
+    # compose.yml's own `volumes:` bind-mounts the audio folder from a
+    # fixed host path, /home/pi/OhmFiles/audio (decided 2026-11-03, for
+    # fleet homogenization) -- meaningless on a dev laptop, and Docker
+    # would just create a stray /home/pi there. `!override` replaces
+    # the whole list (same pattern as `devices:` below) with the named
+    # volume (sqlite), the live-source bind, and a repo-local audio dir
+    # instead.
+    volumes: !override
+      - app-db-data:/app/data
       - ./backend/app:/app/app
+      - ./dev-data/audio:/app/data/audio
     command: ["fastapi", "run", "--reload"]
     # compose.yml's own `devices:` includes /dev/gpiochip0 for
     # app/services/relay.py -- unconditional there because every real
@@ -36,3 +45,12 @@ services:
   lora-daemon:
     volumes:
       - ./lora-daemon/lora_daemon:/app/lora_daemon
+
+  # Same reasoning as `backend` above: compose.yml's own `volumes:`
+  # points at /home/pi/OhmFiles/qlc, meaningless here. Restores the
+  # repo's own committed sample show + fixtures
+  # (`qlcplus/OhmQLCFiles/`) so local dev needs no host setup at all.
+  qlcplus:
+    volumes: !override
+      - ./qlcplus/OhmQLCFiles:/QLC/project
+      - ./qlcplus/OhmQLCFiles/fixtures:/root/.qlcplus/fixtures

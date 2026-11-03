@@ -9,13 +9,23 @@ services:
       - .env
     environment:
       - SQLITE_PATH=/app/data/appestrio.db
-      # Audio page uploads + the last-set volume/file (app/services/
-      # audio_player.py) -- under the same persistent volume as the
-      # sqlite file so they survive a container restart.
+      # Audio page uploads (main + test files) and the persisted
+      # volume/file/loop state (app/services/audio_player.py) -- all
+      # under the one bind-mounted folder below, same fixed host path
+      # on every device (decided 2026-11-03, for fleet homogenization:
+      # a known, predictable location independent of where this repo
+      # happens to be checked out on a given Pi, not the sqlite
+      # named volume's opaque Docker-managed storage).
       - AUDIO_DIR=/app/data/audio
-      - AUDIO_STATE_PATH=/app/data/audio_player_state.json
+      - AUDIO_STATE_PATH=/app/data/audio/audio_player_state.json
     volumes:
       - app-db-data:/app/data
+      # /home/pi/OhmFiles/audio must exist on the host (Docker
+      # auto-creates a missing bind-mount *directory*, confirmed --
+      # unlike a missing device node, this is not fatal at container
+      # start) -- see Docs/Raspberry_Pi_Deployment.md for the full
+      # fleet directory layout.
+      - /home/pi/OhmFiles/audio:/app/data/audio
     # mpv (app/services/audio_player.py) needs the host's sound card to
     # actually produce audio. Unconditional, unlike lora-daemon's
     # /dev/rtc0 below needing a device-tree overlay first: every
@@ -37,6 +47,50 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+
+  # Every lumestrio (and master) runs this unconditionally -- decided
+  # 2026-11-03: appestrio's image should be generic/uniform, same as
+  # mpv above, rather than needing a per-device opt-in overlay.
+  # `handles_dmx` (DB config, not this service's presence) is what
+  # actually gates whether `apply_active_state` starts anything in it
+  # (app/services/dmx_player.py). This **supersedes** the 2026-11-01
+  # decision to keep `qlcplus` in an opt-in `compose.dmx.yml` overlay
+  # (that file no longer exists) -- that earlier reasoning was about a
+  # physical DMX interface not being on every device, which is still
+  # true and still handled below (the commented `devices:` placeholder),
+  # but doesn't require the *software* to be opt-in too.
+  qlcplus:
+    build:
+      context: ./qlcplus
+    restart: always
+    ports:
+      # Reached directly by the browser on this port (App.vue's "QLC+"
+      # nav link, gated by `handles_dmx` via GET /dmx/status) -- not
+      # proxied through `backend`, same model as lora-daemon's own
+      # hardware test console sitting directly on 8765.
+      - "9999:9999"
+    volumes:
+      # Same fixed host path on every device as the audio folder above
+      # (decided 2026-11-03). `/home/pi/OhmFiles/qlc` is mounted as a
+      # whole *directory* (not a specific filename) -- qlcplus.sh's
+      # entrypoint searches it for its one `.qxw` file at startup and
+      # loads whichever is found, so the external partner's project
+      # keeps its own real filename (no renaming to a fixed "qlc.qxw"
+      # needed). Also sidesteps the earlier single-FILE-mount gotcha
+      # entirely: a missing bind-mount *directory* just auto-creates
+      # empty (confirmed harmless), unlike a missing *file* source,
+      # which silently became an empty directory in its place and broke
+      # loading -- no host prerequisite before the first `docker
+      # compose up` anymore. `fixtures/` (QLC+'s own search path for
+      # user fixtures, $HOME/.qlcplus/fixtures == /root/.qlcplus/fixtures
+      # here) is mounted separately at its real target path.
+      - /home/pi/OhmFiles/qlc:/QLC/project
+      - /home/pi/OhmFiles/qlc/fixtures:/root/.qlcplus/fixtures
+    # Add a real DMX interface's device node here once one is wired up
+    # on this specific Pi -- still NOT universal across the fleet,
+    # unlike the service itself above, e.g.:
+    #   devices:
+    #     - /dev/ttyUSB0:/dev/ttyUSB0
 
   lora-daemon:
     image: '${DOCKER_IMAGE_LORA_DAEMON?Variable not set}:${TAG-latest}'

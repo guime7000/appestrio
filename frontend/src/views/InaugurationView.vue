@@ -43,8 +43,19 @@ async function setAllDevicesActive(active: boolean) {
 </template>
 
 <style scoped>
+/* No actual DOM overlap at any viewport width (confirmed 2026-11-04 by
+   rendering this page headlessly from 320px to 1280px) -- but without
+   `flex-wrap`/`flex-shrink: 0`, two fixed-size 12rem circles plus a
+   3rem gap (432px total) don't fit a narrow/mobile screen, so the
+   default flex-shrink squeezes them into ovals sitting close together.
+   On a real touchscreen (this page's actual use case, at an event)
+   that's a real mis-tap risk between adjacent large buttons -- almost
+   certainly what was reported as "clicking Allumer also hits
+   Eteindre." Fixed by never shrinking the circles and letting them
+   wrap onto their own row instead when they don't both fit. */
 .power-buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 3rem;
   justify-content: center;
   align-items: center;
@@ -54,6 +65,7 @@ async function setAllDevicesActive(active: boolean) {
 .power-button {
   width: 12rem;
   height: 12rem;
+  flex-shrink: 0;
   border-radius: 50%;
   border: none;
   font-size: 1.4rem;

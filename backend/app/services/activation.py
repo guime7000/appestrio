@@ -29,14 +29,20 @@ by player state or acknowledged in any way -- see that module's own
 docstring). Same call order as legacy's `sendStartOrStopMessage`: audio
 first, then the relay, in both directions.
 
-DMX (`handles_dmx`) remains a logging placeholder -- out of scope here,
-real OSC/QLC+ wiring is still future work.
+**DMX wired 2026-11-03**, via `app/services/dmx_player.py` -- QLC+'s own
+WebSocket API, addressing Functions by ID discovered live rather than
+anything in the project file itself (so it works against any partner-
+supplied .qxw, never edited, see that module's own docstring for the
+full design). Best-effort posture, same as audio: a `DmxPlayerError`
+(QLC+ unreachable, e.g. `compose.dmx.yml` not included on this device)
+is logged and swallowed, never raised to the caller.
 """
 
 import logging
 
-from app.services import audio_player, relay
+from app.services import audio_player, dmx_player, relay
 from app.services.audio_player import AudioPlayerError
+from app.services.dmx_player import DmxPlayerError
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +63,20 @@ def _start_audio_playback(device_id: str, audiofile: str | None) -> None:
     relay.activate(True)
 
 
+def _start_dmx_show(device_id: str) -> None:
+    try:
+        dmx_player.start_show()
+    except DmxPlayerError as exc:
+        logger.warning("%s: couldn't start QLC+ show: %s", device_id, exc)
+
+
+def _stop_dmx_show(device_id: str) -> None:
+    try:
+        dmx_player.stop_show()
+    except DmxPlayerError as exc:
+        logger.warning("%s: couldn't stop QLC+ show: %s", device_id, exc)
+
+
 def apply_active_state(
     *,
     device_id: str,
@@ -67,14 +87,14 @@ def apply_active_state(
 ) -> None:
     if active:
         if handles_dmx:
-            logger.info("[placeholder] %s: would send OSC to QLC+ to start DMX show", device_id)
+            _start_dmx_show(device_id)
         if handles_audio:
             _start_audio_playback(device_id, audiofile)
         if not handles_dmx and not handles_audio:
             logger.info("[placeholder] %s: activated, but handles neither audio nor DMX", device_id)
     else:
         if handles_dmx:
-            logger.info("[placeholder] %s: would stop DMX show", device_id)
+            _stop_dmx_show(device_id)
         if handles_audio:
             audio_player.stop()
             relay.activate(False)

@@ -22,20 +22,26 @@ this Pi yet (LoRa can't transmit audio bytes, only the filename
 reference), fails loud in the logs rather than crashing the caller --
 same best-effort posture as `_trigger_remote_activate`.
 
-**Relay (the audio amp's power) wired the same day**, via
+**Relay (the audio amp's power) wired 2026-11-01**, via
 `app/services/relay.py` -- ported from legacy's `modules/Relay.ts`
-(GPIO pin 25, toggled unconditionally alongside play/stop, not driven
-by player state or acknowledged in any way -- see that module's own
-docstring). Same call order as legacy's `sendStartOrStopMessage`: audio
-first, then the relay, in both directions.
+(GPIO pin 25, see that module's own docstring). **Decoupled from
+`handles_audio` 2026-11-03**: every lumestrio now runs the full generic
+image (backend/lora-daemon/mpv/QLC+, regardless of which capabilities a
+given device actually uses), and the user explicitly wants the relay
+driven unconditionally by ACTIVATE/DEACTIVATE itself, not gated by
+`handles_audio`/`handles_dmx` the way mpv/QLC+ are -- so it fires first,
+before either capability-gated branch, on every call.
 
 **DMX wired 2026-11-03**, via `app/services/dmx_player.py` -- QLC+'s own
 WebSocket API, addressing Functions by ID discovered live rather than
 anything in the project file itself (so it works against any partner-
 supplied .qxw, never edited, see that module's own docstring for the
 full design). Best-effort posture, same as audio: a `DmxPlayerError`
-(QLC+ unreachable, e.g. `compose.dmx.yml` not included on this device)
-is logged and swallowed, never raised to the caller.
+(QLC+ unreachable) is logged and swallowed, never raised to the caller.
+Also 2026-11-03: the `qlcplus` service moved from an opt-in overlay into
+the base `compose.yml` -- every lumestrio runs it now, same generic-
+image decision as above; `handles_dmx` alone decides whether this
+module is ever actually told to start/stop anything.
 """
 
 import logging
@@ -60,7 +66,6 @@ def _start_audio_playback(device_id: str, audiofile: str | None) -> None:
         audio_player.play()
     except AudioPlayerError as exc:
         logger.warning("%s: couldn't start audio playback: %s", device_id, exc)
-    relay.activate(True)
 
 
 def _start_dmx_show(device_id: str) -> None:
@@ -85,6 +90,7 @@ def apply_active_state(
     handles_dmx: bool,
     audiofile: str | None = None,
 ) -> None:
+    relay.activate(active)
     if active:
         if handles_dmx:
             _start_dmx_show(device_id)
@@ -97,7 +103,6 @@ def apply_active_state(
             _stop_dmx_show(device_id)
         if handles_audio:
             audio_player.stop()
-            relay.activate(False)
         if not handles_dmx and not handles_audio:
             logger.info(
                 "[placeholder] %s: deactivated, but handles neither audio nor DMX", device_id

@@ -75,15 +75,30 @@ def test_apply_active_state_audio_device_activates_relay_even_if_playback_fails(
     assert relay_calls == [True]
 
 
-def test_apply_active_state_non_audio_device_does_not_touch_the_relay(
+def test_apply_active_state_activates_the_relay_even_without_audio(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Decided 2026-11-03: the relay is driven unconditionally by
+    # ACTIVATE/DEACTIVATE itself, not gated by `handles_audio` -- every
+    # lumestrio runs the same generic image regardless of which
+    # capabilities it actually uses.
     relay_calls: list[bool] = []
     monkeypatch.setattr(relay, "activate", relay_calls.append)
 
     apply_active_state(device_id="lumestrio3", active=True, handles_audio=False, handles_dmx=True)
 
-    assert relay_calls == []
+    assert relay_calls == [True]
+
+
+def test_apply_active_state_activates_the_relay_for_a_plain_device(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    relay_calls: list[bool] = []
+    monkeypatch.setattr(relay, "activate", relay_calls.append)
+
+    apply_active_state(device_id="relaystrio5", active=True, handles_audio=False, handles_dmx=False)
+
+    assert relay_calls == [True]
 
 
 def test_apply_active_state_audio_device_preserves_local_volume_and_loop(
@@ -204,5 +219,30 @@ def test_apply_active_state_deactivates_the_relay(monkeypatch: pytest.MonkeyPatc
     assert relay_calls == [False]
 
 
+def test_apply_active_state_deactivates_the_relay_for_a_plain_device(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    relay_calls: list[bool] = []
+    monkeypatch.setattr(relay, "activate", relay_calls.append)
+
+    apply_active_state(device_id="relaystrio5", active=False, handles_audio=False, handles_dmx=False)
+
+    assert relay_calls == [False]
+
+
 def test_apply_active_state_deactivates_plain_device_without_raising() -> None:
     apply_active_state(device_id="relaystrio5", active=False, handles_audio=False, handles_dmx=False)
+
+
+def test_apply_active_state_device_with_both_capabilities_starts_mpv_and_the_qlc_show(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[str] = []
+    monkeypatch.setattr(audio_player, "play", lambda: seen.append("audio"))
+    monkeypatch.setattr(dmx_player, "start_show", lambda: seen.append("dmx"))
+
+    apply_active_state(
+        device_id="lumestrio3", active=True, handles_audio=True, handles_dmx=True, audiofile="x.mp3"
+    )
+
+    assert seen == ["dmx", "audio"]

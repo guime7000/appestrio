@@ -38,6 +38,43 @@ services:
       context: .
       dockerfile: Dockerfile
 
+  # Every lumestrio (and master) runs this unconditionally -- decided
+  # 2026-11-03: appestrio's image should be generic/uniform, same as
+  # mpv above, rather than needing a per-device opt-in overlay.
+  # `handles_dmx` (DB config, not this service's presence) is what
+  # actually gates whether `apply_active_state` starts anything in it
+  # (app/services/dmx_player.py). This **supersedes** the 2026-11-01
+  # decision to keep `qlcplus` in an opt-in `compose.dmx.yml` overlay
+  # (that file no longer exists) -- that earlier reasoning was about a
+  # physical DMX interface not being on every device, which is still
+  # true and still handled below (the commented `devices:` placeholder),
+  # but doesn't require the *software* to be opt-in too.
+  qlcplus:
+    build:
+      context: ./qlcplus
+    restart: always
+    ports:
+      # Reached directly by the browser on this port (App.vue's "QLC+"
+      # nav link, gated by `handles_dmx` via GET /dmx/status) -- not
+      # proxied through `backend`, same model as lora-daemon's own
+      # hardware test console sitting directly on 8765.
+      - "9999:9999"
+    volumes:
+      # The actual project (qlcplus.sh's entrypoint always opens
+      # /QLC/qlc.qxw) and custom fixture profiles (QLC+'s own search
+      # path for user fixtures is $HOME/.qlcplus/fixtures, i.e.
+      # /root/.qlcplus/fixtures here) -- bind-mounted straight from this
+      # repo's own qlcplus/OhmQLCFiles/ rather than an opaque named
+      # volume, so the show's actual project file and fixture library
+      # are plain, editable, committable files on the host.
+      - ./qlcplus/OhmQLCFiles/qlc.qxw:/QLC/qlc.qxw
+      - ./qlcplus/OhmQLCFiles/fixtures:/root/.qlcplus/fixtures
+    # Add a real DMX interface's device node here once one is wired up
+    # on this specific Pi -- still NOT universal across the fleet,
+    # unlike the service itself above, e.g.:
+    #   devices:
+    #     - /dev/ttyUSB0:/dev/ttyUSB0
+
   lora-daemon:
     image: '${DOCKER_IMAGE_LORA_DAEMON?Variable not set}:${TAG-latest}'
     restart: always

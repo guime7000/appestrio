@@ -447,6 +447,79 @@ def test_update_device_active_survives_unreachable_lora_daemon(
     assert response.json()["active"] is False
 
 
+def test_broadcast_activate_sends_one_broadcast_frame(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services import lora_daemon_client
+
+    calls = []
+    monkeypatch.setattr(
+        lora_daemon_client,
+        "send_activate",
+        lambda active, addresses=None, **kwargs: calls.append((active, addresses)),
+    )
+    client.post(DEVICES_URL, json=device_payload(device_number=3))
+    client.post(DEVICES_URL, json=device_payload(device_type="relaystrio", device_number=5))
+
+    response = client.post(f"{DEVICES_URL}broadcast-activate", json={"active": True})
+
+    assert response.status_code == 200
+    # One real broadcast frame -- not one send per device.
+    assert calls == [(True, None)]
+
+
+def test_broadcast_activate_updates_every_device_locally(client: TestClient) -> None:
+    first = client.post(DEVICES_URL, json=device_payload(device_number=3)).json()
+    second = client.post(
+        DEVICES_URL, json=device_payload(device_type="relaystrio", device_number=5)
+    ).json()
+
+    response = client.post(f"{DEVICES_URL}broadcast-activate", json={"active": True})
+
+    assert response.status_code == 200
+    assert client.get(f"{DEVICES_URL}{first['device_id']}").json()["active"] is True
+    assert client.get(f"{DEVICES_URL}{second['device_id']}").json()["active"] is True
+
+
+def test_broadcast_activate_does_not_bump_config_version(
+    client: TestClient, session: Session
+) -> None:
+    from app import crud
+
+    created = client.post(DEVICES_URL, json=device_payload()).json()
+    db_device = crud.get_device_by_device_id(session=session, device_id=created["device_id"])
+    crud.mark_device_synced(session=session, device=db_device, version=db_device.config_version)
+
+    client.post(f"{DEVICES_URL}broadcast-activate", json={"active": False})
+
+    pending = client.get(f"{DEVICES_URL}pending-sync").json()["device_ids"]
+    assert created["device_id"] not in pending
+
+
+def test_broadcast_activate_survives_unreachable_lora_daemon(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services import lora_daemon_client
+    from app.services.lora_daemon_client import LoraDaemonError
+
+    def _raise(*_args, **_kwargs):
+        raise LoraDaemonError("unreachable")
+
+    monkeypatch.setattr(lora_daemon_client, "send_activate", _raise)
+    created = client.post(DEVICES_URL, json=device_payload()).json()
+
+    response = client.post(f"{DEVICES_URL}broadcast-activate", json={"active": True})
+
+    assert response.status_code == 200
+    assert client.get(f"{DEVICES_URL}{created['device_id']}").json()["active"] is True
+
+
+def test_broadcast_activate_with_no_devices(client: TestClient) -> None:
+    response = client.post(f"{DEVICES_URL}broadcast-activate", json={"active": True})
+
+    assert response.status_code == 200
+
+
 def test_update_device_without_active_does_not_call_remote_activate(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

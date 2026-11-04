@@ -15,14 +15,17 @@ class _FakeStderr:
 
 
 class _FakeProcess:
-    def __init__(self, *, exits_immediately: bool = False, stderr: bytes = b"") -> None:
+    def __init__(
+        self, *, exits_immediately: bool = False, returncode: int = 1, stderr: bytes = b""
+    ) -> None:
         self.terminated = False
         self.killed = False
         self._exited = exits_immediately
+        self._returncode = returncode
         self.stderr = _FakeStderr(stderr)
 
     def poll(self) -> int | None:
-        return 0 if self._exited else None
+        return self._returncode if self._exited else None
 
     def terminate(self) -> None:
         self.terminated = True
@@ -171,11 +174,37 @@ def test_play_raises_with_stderr_when_mpv_exits_immediately(
     monkeypatch.setattr(
         audio_player,
         "_start_process",
-        lambda _args: _FakeProcess(exits_immediately=True, stderr=b"AO: [alsa] no device\n"),
+        lambda _args: _FakeProcess(
+            exits_immediately=True, returncode=1, stderr=b"AO: [alsa] no device\n"
+        ),
     )
 
     with pytest.raises(audio_player.AudioPlayerError, match="no device"):
         audio_player.play()
+
+    assert audio_player.is_playing() is False
+
+
+def test_play_succeeds_when_mpv_finishes_a_short_clip_within_the_check_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Confirmed directly against a real mpv process (2026-11-04): a
+    # short clip can genuinely finish (exit code 0, "Exiting... (End of
+    # file)") before the early-exit check even runs -- this must not be
+    # reported as a failure, even if mpv printed something benign to
+    # stderr along the way (e.g. a PipeWire probe warning before
+    # falling back to a working ALSA output).
+    name = _write_audio_file()
+    _set_state(volume=50, audiofile=name)
+    monkeypatch.setattr(
+        audio_player,
+        "_start_process",
+        lambda _args: _FakeProcess(
+            exits_immediately=True, returncode=0, stderr=b"some benign startup warning\n"
+        ),
+    )
+
+    audio_player.play()  # must not raise
 
     assert audio_player.is_playing() is False
 

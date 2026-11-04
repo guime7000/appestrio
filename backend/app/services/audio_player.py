@@ -185,11 +185,24 @@ def _play_file(
         raise AudioPlayerError(f"Couldn't start mpv: {exc}") from exc
 
     time.sleep(EARLY_EXIT_CHECK_DELAY_S)
-    if _process.poll() is not None:
+    returncode = _process.poll()
+    if returncode is not None:
         stderr_output = ""
         if _process.stderr is not None:
             stderr_output = _process.stderr.read().decode("utf-8", errors="replace").strip()
         _process = None
+        if returncode == 0:
+            # Confirmed directly (2026-11-04, a real false-failure report):
+            # a short clip can genuinely finish playing before this check
+            # even runs -- mpv's own "Exiting... (End of file)" exit code
+            # 0, not a startup failure. Previously this whole branch
+            # assumed *any* exit within the check window meant "never
+            # played" and raised, which could surface a totally benign
+            # startup warning (e.g. mpv probing PipeWire, failing, then
+            # falling back to a working ALSA output) as if it were a
+            # fatal error on a file that had, in fact, already played
+            # successfully in full.
+            return
         detail = stderr_output or "no error output captured"
         raise AudioPlayerError(f"mpv exited immediately, nothing played: {detail}")
 

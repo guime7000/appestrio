@@ -47,6 +47,11 @@ const router = createRouter({
       component: () => import("@/views/AudioView.vue"),
     },
     {
+      path: "/upload",
+      name: "upload",
+      component: () => import("@/views/UploadView.vue"),
+    },
+    {
       path: "/:pathMatch(.*)*",
       name: "not-found",
       component: () => import("@/views/NotFoundView.vue"),

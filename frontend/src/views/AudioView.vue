@@ -12,8 +12,6 @@ const volume = ref(100);
 const loop = ref(false);
 const playing = ref(false);
 const busy = ref(false);
-const uploading = ref(false);
-const uploadingTest = ref(false);
 const error = ref<string | null>(null);
 
 function applyStatus(status: AudioStatusPublic) {
@@ -94,37 +92,6 @@ async function onLoopChange() {
   }
 }
 
-async function onFileSelected(event: Event) {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  if (!file) return;
-  uploading.value = true;
-  error.value = null;
-  try {
-    applyStatus(await audioApi.upload(file));
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    uploading.value = false;
-    input.value = "";
-  }
-}
-
-async function onTestFileSelected(event: Event) {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  if (!file) return;
-  uploadingTest.value = true;
-  error.value = null;
-  try {
-    applyStatus(await audioApi.uploadTest(file));
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    uploadingTest.value = false;
-    input.value = "";
-  }
-}
 </script>
 
 <template>
@@ -140,34 +107,19 @@ async function onTestFileSelected(event: Event) {
     </p>
 
     <template v-else>
-      <section class="upload-section">
-        <h2>Fichier audio</h2>
-        <p v-if="audiofile">Fichier actuel : <strong>{{ audiofile }}</strong></p>
-        <p v-else>Aucun fichier envoyé pour le moment.</p>
-        <label class="upload-button">
-          {{ uploading ? "Envoi en cours…" : "Envoyer un fichier" }}
-          <input
-            type="file"
-            accept=".mp3,.wav,.ogg,.flac,.m4a"
-            :disabled="uploading"
-            @change="onFileSelected"
-          />
-        </label>
-      </section>
-
-      <section class="upload-section">
-        <h2>Son test</h2>
-        <p v-if="testAudiofile">Son test actuel : <strong>{{ testAudiofile }}</strong></p>
-        <p v-else>Aucun son test envoyé pour le moment.</p>
-        <label class="upload-button">
-          {{ uploadingTest ? "Envoi en cours…" : "Envoyer un son test" }}
-          <input
-            type="file"
-            accept=".mp3,.wav,.ogg,.flac,.m4a"
-            :disabled="uploadingTest"
-            @change="onTestFileSelected"
-          />
-        </label>
+      <section class="files-section">
+        <p>
+          Fichier actuel :
+          <strong>{{ audiofile ?? "aucun" }}</strong>
+        </p>
+        <p>
+          Son test actuel :
+          <strong>{{ testAudiofile ?? "aucun" }}</strong>
+        </p>
+        <p class="hint">
+          L'envoi de fichiers se fait désormais depuis la page
+          <RouterLink to="/upload">Upload</RouterLink>.
+        </p>
       </section>
 
       <section class="playback-section">
@@ -224,25 +176,20 @@ async function onTestFileSelected(event: Event) {
   font-size: 0.9rem;
 }
 
-.upload-section,
+.files-section,
 .playback-section {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.upload-button {
-  display: inline-block;
-  width: fit-content;
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-alt);
-  cursor: pointer;
+.files-section p {
+  margin: 0;
 }
 
-.upload-button input[type="file"] {
-  display: none;
+.hint {
+  color: var(--color-muted);
+  font-size: 0.9rem;
 }
 
 .playback-controls {

@@ -85,9 +85,14 @@ class Device(DeviceBase, table=True):
     # has ever been pushed to it.
     config_version: int = Field(default=1)
     synced_version: int = Field(default=0)
-    # Liveness/reachability, written by the (not yet built) LoRa daemon from
-    # each PONG reply -- not written anywhere yet. Both null until a device
-    # has actually been pinged at least once; no UI surfacing yet either.
+    # Liveness/reachability, written by `lora-daemon`'s `PingScheduler`
+    # on every real PONG (`db.record_device_seen`, raw SQL against this
+    # same shared sqlite file -- `backend` only ever reads these, never
+    # writes them; `crud.record_device_seen` is unused dead code left
+    # from an earlier design before the daemon existed). Both null until
+    # a device has actually been pinged at least once. Surfaced on
+    # `DevicePublic` 2026-11-04 (the Appareils table's "Dernière
+    # connexion"/reachable columns).
     last_seen: datetime | None = Field(default=None)
     last_roundtrip_ms: int | None = Field(default=None)
 
@@ -157,6 +162,11 @@ class DevicePublic(SQLModel):
     audiofile: str | None = None
     ip: str | None = None
     master_ip: str | None = None
+    # Liveness, written by `lora-daemon` on every real PONG -- see
+    # `Device`'s own field comment. Null until this device has actually
+    # replied to a PING at least once.
+    last_seen: datetime | None = None
+    last_roundtrip_ms: int | None = None
     updated_at: datetime
 
 

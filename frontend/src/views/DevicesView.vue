@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 
 import CalendarDetailModal from "@/components/CalendarDetailModal.vue";
 import GroupDetailModal from "@/components/GroupDetailModal.vue";
 import PendingSyncBanner from "@/components/PendingSyncBanner.vue";
 import { devicesApi } from "@/api/devices";
 import { groupsApi } from "@/api/groups";
+import { loraSettingsApi } from "@/api/loraSettings";
 import type {
   CalendarPublic,
   DevicePublic,
@@ -15,12 +16,27 @@ import type {
 } from "@/api/types";
 
 const deviceTypes: DeviceType[] = ["lumestrio", "relaystrio"];
+// Tolerates a couple of missed PING cycles before flagging a device
+// unreachable, rather than flickering offline on one dropped PONG --
+// same "don't overreact to a single miss" spirit `sync_device_config`'s
+// own retry-next-cycle behavior already follows. Falls back to a 5s
+// interval (the backend's own default) if `/lora-settings/` hasn't
+// loaded yet.
+const REACHABLE_MISSED_CYCLES = 3;
+const DEFAULT_PING_INTERVAL_S = 5;
+// Live status board: devices (incl. last_seen) and the pending-sync
+// banner refresh on their own, without the user needing to do anything.
+const REFRESH_INTERVAL_MS = 5000;
 
 const devices = ref<DevicePublic[]>([]);
 const groups = ref<GroupPublic[]>([]);
 const selectedDeviceIds = ref<Set<string>>(new Set());
 const pendingSyncCount = ref(0);
 const pendingSyncDeviceIds = ref<string[]>([]);
+const pingIntervalS = ref(DEFAULT_PING_INTERVAL_S);
+// Ticks once a second purely to force "il y a Xs"/reachability to
+// re-render as time passes, without needing a fresh fetch each time.
+const now = ref(Date.now());
 
 const detailModalOpen = ref(false);
 const detailDevice = ref<DevicePublic | null>(null);
@@ -92,6 +108,32 @@ watch(
     }
   },
 );
+
+async function loadPingInterval() {
+  try {
+    const settings = await loraSettingsApi.get();
+    pingIntervalS.value = settings.ping_interval_s;
+  } catch {
+    // Keep the default -- not critical enough to surface an error for.
+  }
+}
+
+function isReachable(device: DevicePublic): boolean {
+  if (!device.last_seen) return false;
+  const lastSeenMs = new Date(device.last_seen).getTime();
+  const thresholdMs = Math.max(pingIntervalS.value, 1) * REACHABLE_MISSED_CYCLES * 1000;
+  return now.value - lastSeenMs <= thresholdMs;
+}
+
+function lastSeenLabel(device: DevicePublic): string {
+  if (!device.last_seen) return "Jamais vu";
+  const diffS = Math.max(0, Math.round((now.value - new Date(device.last_seen).getTime()) / 1000));
+  if (diffS < 60) return `il y a ${diffS} s`;
+  const diffMin = Math.round(diffS / 60);
+  if (diffMin < 60) return `il y a ${diffMin} min`;
+  const diffH = Math.round(diffMin / 60);
+  return `il y a ${diffH} h`;
+}
 
 async function loadDevices() {
   const [devicesResult, groupsResult, pendingSyncResult] = await Promise.all([
@@ -272,7 +314,22 @@ async function removeSelectedDevices() {
   await loadDevices();
 }
 
-onMounted(loadDevices);
+let refreshTimer: ReturnType<typeof setInterval> | undefined;
+let clockTimer: ReturnType<typeof setInterval> | undefined;
+
+onMounted(() => {
+  loadDevices();
+  loadPingInterval();
+  refreshTimer = setInterval(loadDevices, REFRESH_INTERVAL_MS);
+  clockTimer = setInterval(() => {
+    now.value = Date.now();
+  }, 1000);
+});
+
+onUnmounted(() => {
+  clearInterval(refreshTimer);
+  clearInterval(clockTimer);
+});
 </script>
 
 <template>
@@ -298,6 +355,7 @@ onMounted(loadDevices);
         <th>Nom de série</th>
         <th>Nom sur le projet</th>
         <th>Statut</th>
+        <th>Joignable</th>
         <th>Groupe</th>
         <th>Calendrier</th>
       </tr>
@@ -317,18 +375,35 @@ onMounted(loadDevices);
             {{ device.device_name }}
           </a>
         </td>
-        <td class="status-cell">
-          <span
-            class="bulb"
-            :class="device.active ? 'bulb-on' : 'bulb-off'"
-            :title="device.active ? 'Allumé' : 'Éteint'"
-          >
-            💡
-          </span>
-          <button v-if="!device.is_master" type="button" @click="toggleActive(device)">
-            {{ device.active ? "Éteindre" : "Allumer" }}
-          </button>
-          <span v-else class="hint">Maître — toujours actif</span>
+        <td>
+          <div class="status-cell">
+            <span
+              class="bulb"
+              :class="device.active ? 'bulb-on' : 'bulb-off'"
+              :title="device.active ? 'Allumé' : 'Éteint'"
+            >
+              💡
+            </span>
+            <button v-if="!device.is_master" type="button" @click="toggleActive(device)">
+              {{ device.active ? "Éteindre" : "Allumer" }}
+            </button>
+            <span v-else class="hint">Maître — toujours actif</span>
+          </div>
+        </td>
+        <td>
+          <div class="reachable-cell">
+            <span
+              class="reachable-dot"
+              :class="isReachable(device) ? 'reachable-yes' : 'reachable-no'"
+              :title="device.last_seen ? `Dernier contact ${lastSeenLabel(device)}` : 'Jamais contacté'"
+            >
+              ●
+            </span>
+            <span class="hint">{{ lastSeenLabel(device) }}</span>
+            <span v-if="device.last_roundtrip_ms !== null" class="hint">
+              ({{ device.last_roundtrip_ms }} ms)
+            </span>
+          </div>
         </td>
         <td>
           <a
@@ -423,6 +498,19 @@ onMounted(loadDevices);
         <dd>{{ detailDevice.master_ip ?? "—" }}</dd>
         <dt>Fichier audio</dt>
         <dd>{{ detailDevice.audiofile ?? "—" }}</dd>
+        <dt>Joignable</dt>
+        <dd>
+          <span
+            class="reachable-dot"
+            :class="isReachable(detailDevice) ? 'reachable-yes' : 'reachable-no'"
+          >
+            ●
+          </span>
+          {{ lastSeenLabel(detailDevice) }}
+          <span v-if="detailDevice.last_roundtrip_ms !== null">
+            ({{ detailDevice.last_roundtrip_ms }} ms)
+          </span>
+        </dd>
         <dt>Dernière modification</dt>
         <dd>{{ detailDevice.updated_at }}</dd>
       </dl>
@@ -562,6 +650,27 @@ table {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.reachable-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.reachable-dot {
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.reachable-yes {
+  color: #2e9e3e;
+}
+
+.reachable-no {
+  color: var(--color-muted);
 }
 
 .bulb {

@@ -645,6 +645,8 @@ def device_to_public(device: Device) -> DevicePublic:
         audiofile=device.audiofile,
         ip=device.ip,
         master_ip=device.master_ip,
+        last_seen=device.last_seen,
+        last_roundtrip_ms=device.last_roundtrip_ms,
         updated_at=device.updated_at,
     )
 

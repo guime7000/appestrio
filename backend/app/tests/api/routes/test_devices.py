@@ -23,6 +23,26 @@ def test_create_device(client: TestClient) -> None:
     assert content["is_master"] is False
     assert "uuid" not in content
     assert "updated_at" in content
+    # Never pinged yet -- both null.
+    assert content["last_seen"] is None
+    assert content["last_roundtrip_ms"] is None
+
+
+def test_get_device_reports_last_seen_once_recorded(
+    client: TestClient, session: Session
+) -> None:
+    from app import crud
+
+    created = client.post(DEVICES_URL, json=device_payload(device_number=13)).json()
+    db_device = crud.get_device_by_device_id(session=session, device_id=created["device_id"])
+    crud.record_device_seen(session=session, device=db_device, roundtrip_ms=42)
+
+    response = client.get(f"{DEVICES_URL}{created['device_id']}")
+
+    assert response.status_code == 200
+    content = response.json()
+    assert content["last_seen"] is not None
+    assert content["last_roundtrip_ms"] == 42
 
 
 def test_create_device_rejects_negative_device_number(client: TestClient) -> None:

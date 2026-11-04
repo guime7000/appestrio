@@ -105,6 +105,10 @@ export interface DevicePublic {
   audiofile: string | null;
   ip: string | null;
   master_ip: string | null;
+  // Liveness, written by lora-daemon on every real PONG. Null until this
+  // device has actually replied to a PING at least once.
+  last_seen: string | null;
+  last_roundtrip_ms: number | null;
   updated_at: string;
 }
 

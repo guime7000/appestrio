@@ -34,7 +34,7 @@ def test_apply_active_state_audio_device_plays_the_configured_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     seen: list[str | None] = []
-    monkeypatch.setattr(audio_player, "play", lambda: seen.append("played"))
+    monkeypatch.setattr(audio_player, "play", lambda **_kwargs: seen.append("played"))
 
     apply_active_state(
         device_id="lumestrio3", active=True, handles_audio=True, handles_dmx=False, audiofile="x.mp3"
@@ -44,10 +44,26 @@ def test_apply_active_state_audio_device_plays_the_configured_file(
     assert audio_player.load_state()["audiofile"] == "x.mp3"
 
 
+def test_apply_active_state_audio_device_plays_with_loop_forced_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Decided 2026-11-04: a real ACTIVATE always loops the show's
+    # background audio, regardless of the Audio page's own "Lire en
+    # boucle" calibration setting.
+    seen: list[bool | None] = []
+    monkeypatch.setattr(audio_player, "play", lambda **kwargs: seen.append(kwargs.get("loop")))
+
+    apply_active_state(
+        device_id="lumestrio3", active=True, handles_audio=True, handles_dmx=False, audiofile="x.mp3"
+    )
+
+    assert seen == [True]
+
+
 def test_apply_active_state_audio_device_activates_the_relay(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(audio_player, "play", lambda: None)
+    monkeypatch.setattr(audio_player, "play", lambda **_kwargs: None)
     relay_calls: list[bool] = []
     monkeypatch.setattr(relay, "activate", relay_calls.append)
 
@@ -61,7 +77,7 @@ def test_apply_active_state_audio_device_activates_the_relay(
 def test_apply_active_state_audio_device_activates_relay_even_if_playback_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def _raise() -> None:
+    def _raise(**_kwargs) -> None:
         raise AudioPlayerError("no audio device")
 
     monkeypatch.setattr(audio_player, "play", _raise)
@@ -105,7 +121,7 @@ def test_apply_active_state_audio_device_preserves_local_volume_and_loop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     audio_player.save_state(volume=42, audiofile="old.mp3", test_audiofile="test/tone.mp3", loop=True)
-    monkeypatch.setattr(audio_player, "play", lambda: None)
+    monkeypatch.setattr(audio_player, "play", lambda **_kwargs: None)
 
     apply_active_state(
         device_id="lumestrio3", active=True, handles_audio=True, handles_dmx=False, audiofile="new.mp3"
@@ -122,7 +138,7 @@ def test_apply_active_state_audio_device_preserves_local_volume_and_loop(
 def test_apply_active_state_audio_device_survives_playback_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def _raise() -> None:
+    def _raise(**_kwargs) -> None:
         raise AudioPlayerError("no audio device")
 
     monkeypatch.setattr(audio_player, "play", _raise)
@@ -136,7 +152,7 @@ def test_apply_active_state_audio_device_without_configured_file_still_tries_to_
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     seen: list[str] = []
-    monkeypatch.setattr(audio_player, "play", lambda: seen.append("played"))
+    monkeypatch.setattr(audio_player, "play", lambda **_kwargs: seen.append("played"))
 
     apply_active_state(
         device_id="lumestrio3", active=True, handles_audio=True, handles_dmx=False, audiofile=None
@@ -238,7 +254,7 @@ def test_apply_active_state_device_with_both_capabilities_starts_mpv_and_the_qlc
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     seen: list[str] = []
-    monkeypatch.setattr(audio_player, "play", lambda: seen.append("audio"))
+    monkeypatch.setattr(audio_player, "play", lambda **_kwargs: seen.append("audio"))
     monkeypatch.setattr(dmx_player, "start_show", lambda: seen.append("dmx"))
 
     apply_active_state(

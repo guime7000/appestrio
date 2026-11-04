@@ -13,14 +13,24 @@ docstring already called out. `audiofile` (this device's
 master-configured show file, from the `devices` table) is written into
 `audio_player`'s own persisted state on every activation, so it stays
 the single source of truth for "which file" while `audio_player`'s own
-volume/loop calibration (set via the Audio page, no master-side
-equivalent) carries over unchanged -- the same self-healing pattern
-`active` itself already follows elsewhere in this codebase (every real
-signal overwrites local state, never just assumed). A device with no
+volume calibration (set via the Audio page, no master-side equivalent)
+carries over unchanged -- the same self-healing pattern `active` itself
+already follows elsewhere in this codebase (every real signal
+overwrites local state, never just assumed). A device with no
 `audiofile` configured, or a file that hasn't actually been uploaded to
 this Pi yet (LoRa can't transmit audio bytes, only the filename
 reference), fails loud in the logs rather than crashing the caller --
 same best-effort posture as `_trigger_remote_activate`.
+
+**Loop forced on for a real ACTIVATE, 2026-11-04**: unlike volume,
+`loop` is *not* read from `audio_player`'s persisted state here --
+`play(loop=True)` is called explicitly, so a live show's background
+audio always keeps looping until DEACTIVATE, regardless of whatever the
+Audio page's own "Lire en boucle" checkbox is currently set to (that
+checkbox stays purely a local manual-testing/calibration control, same
+spirit as volume, just not read for this real-playback path). See
+`audio_player.play`'s own docstring for why this is a one-off override,
+not a write to the persisted state.
 
 **Relay (the audio amp's power) wired 2026-11-01**, via
 `app/services/relay.py` -- ported from legacy's `modules/Relay.ts`
@@ -63,7 +73,7 @@ def _start_audio_playback(device_id: str, audiofile: str | None) -> None:
             loop=state["loop"],
         )
     try:
-        audio_player.play()
+        audio_player.play(loop=True)
     except AudioPlayerError as exc:
         logger.warning("%s: couldn't start audio playback: %s", device_id, exc)
 

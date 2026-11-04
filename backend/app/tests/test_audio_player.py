@@ -143,6 +143,45 @@ def test_play_passes_loop_file_inf_when_loop_enabled(monkeypatch: pytest.MonkeyP
     assert "--loop-file=inf" in seen_args[0]
 
 
+def test_play_loop_override_wins_over_persisted_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    name = _write_audio_file()
+    _set_state(volume=50, audiofile=name, loop=False)
+    seen_args: list[list[str]] = []
+    monkeypatch.setattr(
+        audio_player, "_start_process", lambda args: (seen_args.append(args), _FakeProcess())[1]
+    )
+
+    audio_player.play(loop=True)
+
+    assert "--loop-file=inf" in seen_args[0]
+
+
+def test_play_loop_override_wins_over_persisted_true(monkeypatch: pytest.MonkeyPatch) -> None:
+    name = _write_audio_file()
+    _set_state(volume=50, audiofile=name, loop=True)
+    seen_args: list[list[str]] = []
+    monkeypatch.setattr(
+        audio_player, "_start_process", lambda args: (seen_args.append(args), _FakeProcess())[1]
+    )
+
+    audio_player.play(loop=False)
+
+    assert "--loop-file=no" in seen_args[0]
+
+
+def test_play_loop_override_does_not_persist(monkeypatch: pytest.MonkeyPatch) -> None:
+    name = _write_audio_file()
+    _set_state(volume=50, audiofile=name, loop=False)
+    monkeypatch.setattr(audio_player, "_start_process", lambda _args: _FakeProcess())
+
+    audio_player.play(loop=True)
+
+    # The override is one-off, for this call only -- the Audio page's
+    # own persisted calibration value is left exactly as the user set
+    # it (same posture as `volume`).
+    assert audio_player.load_state()["loop"] is False
+
+
 def test_play_does_not_touch_test_audiofile(monkeypatch: pytest.MonkeyPatch) -> None:
     name = _write_audio_file()
     _set_state(volume=50, audiofile=name, test_audiofile="test/tone.mp3")

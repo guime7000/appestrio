@@ -207,17 +207,28 @@ def _play_file(
         raise AudioPlayerError(f"mpv exited immediately, nothing played: {detail}")
 
 
-def play() -> None:
+def play(*, loop: bool | None = None) -> None:
     """Plays this device's main configured audio file -- "Fichier
-    actuel", set via the main upload slot -- at the persisted volume and
-    loop setting. Also the file the real `apply_active_state`
-    implementation (not built yet) should eventually use.
+    actuel", set via the main upload slot -- at the persisted volume,
+    and the persisted loop setting unless `loop` overrides it.
+
+    This is also the function `apply_active_state` (the real ACTIVATE
+    wiring, `app/services/activation.py`) calls -- it passes
+    `loop=True` explicitly (decided 2026-11-04: a live show's
+    background audio should keep looping until DEACTIVATE, regardless
+    of whatever the Audio page's own "Lire en boucle" checkbox happens
+    to be set to). The override is one-off, for this call only -- it
+    never writes back to the persisted state, so the Audio page's own
+    local calibration value (manual testing/calibration, independent of
+    real activation, same as `volume`) is left exactly as the user set
+    it. The Audio page's own "Lecture" button calls `play()` with no
+    override, so it keeps respecting the persisted value as before.
     """
     state = load_state()
     _play_file(
         target_file=state["audiofile"],
         volume=state["volume"],
-        loop=state["loop"],
+        loop=state["loop"] if loop is None else loop,
         not_configured_message="No audio file configured for this device yet",
     )
 

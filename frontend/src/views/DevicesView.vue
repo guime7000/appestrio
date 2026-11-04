@@ -79,6 +79,20 @@ watch(
   },
 );
 
+// The master device can never be in a group (guard requested
+// 2026-11-04, also enforced backend-side so a direct API call can't
+// bypass it) -- clearing the selection the moment "Maître" is checked
+// keeps the form from ever submitting a combination the backend would
+// reject anyway.
+watch(
+  () => deviceForm.is_master,
+  (isMaster) => {
+    if (isMaster) {
+      deviceForm.group_id = "";
+    }
+  },
+);
+
 async function loadDevices() {
   const [devicesResult, groupsResult, pendingSyncResult] = await Promise.all([
     devicesApi.list(),
@@ -146,7 +160,13 @@ async function submitDeviceForm() {
       await devicesApi.update(editingDeviceId.value, {
         device_name: deviceForm.device_name.trim(),
         device_type: deviceForm.device_type,
-        active: deviceForm.active,
+        // The master device's `active` state can't be toggled at all
+        // (backend-enforced, 2026-11-04) -- omitted here entirely when
+        // editing a device that will end up master, so saving an
+        // unrelated field (e.g. its name) never trips that guard just
+        // because this form always carries the checkbox's current
+        // value alongside everything else.
+        ...(deviceForm.is_master ? {} : { active: deviceForm.active }),
         is_master: deviceForm.is_master,
         handles_audio: deviceForm.device_type === "lumestrio" ? deviceForm.handles_audio : false,
         handles_dmx: deviceForm.device_type === "lumestrio" ? deviceForm.handles_dmx : false,
@@ -305,9 +325,10 @@ onMounted(loadDevices);
           >
             💡
           </span>
-          <button type="button" @click="toggleActive(device)">
+          <button v-if="!device.is_master" type="button" @click="toggleActive(device)">
             {{ device.active ? "Éteindre" : "Allumer" }}
           </button>
+          <span v-else class="hint">Maître — toujours actif</span>
         </td>
         <td>
           <a
@@ -446,10 +467,11 @@ onMounted(loadDevices);
             </option>
           </select>
         </label>
-        <label class="checkbox-label">
+        <label v-if="!deviceForm.is_master" class="checkbox-label">
           <input type="checkbox" v-model="deviceForm.active" />
           Actif
         </label>
+        <p v-else class="hint">Le maître est toujours actif.</p>
         <label class="checkbox-label">
           <input type="checkbox" v-model="deviceForm.is_master" />
           Maître
@@ -472,12 +494,15 @@ onMounted(loadDevices);
         </p>
         <label>
           Groupe
-          <select v-model="deviceForm.group_id">
+          <select v-model="deviceForm.group_id" :disabled="deviceForm.is_master">
             <option value="">—</option>
             <option v-for="group in groups" :key="group.uuid" :value="group.uuid">
               {{ group.label }}
             </option>
           </select>
+          <span v-if="deviceForm.is_master" class="hint">
+            Le maître ne peut pas être associé à un groupe.
+          </span>
         </label>
         <label>
           IP
@@ -625,6 +650,11 @@ td {
   border-radius: 4px;
   padding: 0.5rem 0.75rem;
   margin: -0.25rem 0 0;
+  font-size: 0.85rem;
+}
+
+.hint {
+  color: var(--color-muted);
   font-size: 0.85rem;
 }
 

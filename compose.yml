@@ -23,6 +23,22 @@ services:
       # project file + fixtures from, mounted here too so this
       # container can write into it directly.
       - QLC_PROJECT_DIR=/app/data/qlc
+      # `qlcplus` moved to `network_mode: host` (2026-11-04, for a real
+      # Art-Net DMX box on the LAN -- see that service's own comment)
+      # and is no longer on this project's compose network at all, so
+      # its service name (`qlcplus`, the settings default) no longer
+      # resolves via Docker's embedded DNS. `host.docker.internal`
+      # (below, via `extra_hosts`) reaches the Pi itself instead, where
+      # `qlcplus` is now listening directly on port 9999 -- used by
+      # both app/services/dmx_player.py's WebSocket connection and
+      # app/services/qlc_files.py's live-reload HTTP push.
+      - QLCPLUS_HOST=host.docker.internal
+    extra_hosts:
+      # `host.docker.internal` resolves automatically on Docker Desktop
+      # (Mac/Windows) but needs this explicit entry on native Linux
+      # (Docker Engine 20.10+) -- both the real Pi and this project's
+      # own native-Linux dev setup.
+      - "host.docker.internal:host-gateway"
     volumes:
       - app-db-data:/app/data
       # /home/pi/OhmFiles/audio must exist on the host (Docker
@@ -80,12 +96,29 @@ services:
     build:
       context: ./qlcplus
     restart: always
-    ports:
-      # Reached directly by the browser on this port (App.vue's "QLC+"
-      # nav link, gated by `handles_dmx` via GET /dmx/status) -- not
-      # proxied through `backend`, same model as lora-daemon's own
-      # hardware test console sitting directly on 8765.
-      - "9999:9999"
+    # Decided 2026-11-04: the real DMX interface is an Art-Net box on
+    # the Ethernet LAN, not a USB-DMX dongle -- no `devices:` passthrough
+    # needed at all (Art-Net is just UDP traffic, confirmed QLC+'s own
+    # Art-Net output plugin needs no special device node). But QLC+'s
+    # Art-Net output commonly broadcasts to reach nodes without
+    # configuring IPs, and a broadcast sent from Docker's own default
+    # bridge network stays inside that bridge's private subnet -- it
+    # never reaches the real LAN the Art-Net box sits on. `network_mode:
+    # host` shares the Pi's own network stack directly instead, so
+    # broadcast (and everything else) behaves exactly like a normal
+    # process on the host -- confirmed fine here, no network-isolation
+    # concern on this fleet (every device is a single-purpose,
+    # physically-controlled Pi). Also why `ports:` is gone below: it's
+    # incompatible with host networking (the container's own port 9999
+    # just *is* the host's port 9999 now, no mapping needed -- the "QLC+"
+    # nav link's `http://<hostname>:9999` keeps working unchanged).
+    #
+    # A real, non-obvious consequence: this also takes `qlcplus` off the
+    # project's own compose network entirely, so `backend` can no longer
+    # reach it by its service name (`qlcplus`) via Docker's embedded
+    # DNS -- see `backend`'s own `QLCPLUS_HOST`/`extra_hosts` below for
+    # how that's resolved.
+    network_mode: host
     volumes:
       # Same fixed host path on every device as the audio folder above
       # (decided 2026-11-03). `/home/pi/OhmFiles/qlc` is mounted as a
@@ -103,11 +136,10 @@ services:
       # here) is mounted separately at its real target path.
       - /home/pi/OhmFiles/qlc:/QLC/project
       - /home/pi/OhmFiles/qlc/fixtures:/root/.qlcplus/fixtures
-    # Add a real DMX interface's device node here once one is wired up
-    # on this specific Pi -- still NOT universal across the fleet,
-    # unlike the service itself above, e.g.:
-    #   devices:
-    #     - /dev/ttyUSB0:/dev/ttyUSB0
+    # The Art-Net DMX box itself needs no entry here at all (see the
+    # `network_mode: host` comment above) -- it's configured inside
+    # QLC+'s own Output Manager (which IP/universe to target), not at
+    # the container level the way a USB interface would have needed.
 
   lora-daemon:
     image: '${DOCKER_IMAGE_LORA_DAEMON?Variable not set}:${TAG-latest}'

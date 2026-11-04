@@ -17,7 +17,7 @@ onMounted(() => {
 
 const navLinks = computed(() => [
   { to: "/", label: "Inauguration" },
-  ...(whoami.isMaster ? [{ to: "/configuration", label: "Configuration" }] : []),
+  { to: "/configuration", label: "Configuration" },
   ...(audio.handlesAudio ? [{ to: "/audio", label: "Audio" }] : []),
   // Gated by either capability -- the Upload page itself only shows
   // the fields relevant to this device (handles_audio/handles_dmx),
@@ -44,14 +44,17 @@ const { theme, toggleTheme } = useTheme();
         QLC+
       </a>
     </div>
-    <button
-      type="button"
-      class="theme-toggle"
-      :aria-label="theme === 'dark' ? 'Passer au thème clair' : 'Passer au thème sombre'"
-      @click="toggleTheme"
-    >
-      {{ theme === "dark" ? "☀️ Clair" : "🌙 Sombre" }}
-    </button>
+    <div class="nav-right">
+      <span v-if="whoami.isMaster" class="master-badge">MASTER</span>
+      <button
+        type="button"
+        class="theme-toggle"
+        :aria-label="theme === 'dark' ? 'Passer au thème clair' : 'Passer au thème sombre'"
+        @click="toggleTheme"
+      >
+        {{ theme === "dark" ? "☀️ Clair" : "🌙 Sombre" }}
+      </button>
+    </div>
   </nav>
   <main>
     <RouterView />
@@ -87,6 +90,22 @@ const { theme, toggleTheme } = useTheme();
   color: var(--color-text);
   font-weight: bold;
   cursor: pointer;
+}
+
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.master-badge {
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: #c0202c;
+  color: #fff;
+  font-weight: bold;
+  letter-spacing: 0.05em;
+  font-size: 0.85rem;
 }
 
 main {

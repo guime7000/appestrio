@@ -44,6 +44,32 @@ def _check_group_exists(session: SessionDep, group_id: uuid.UUID | None) -> None
         raise HTTPException(status_code=404, detail="Group not found")
 
 
+def _check_master_not_grouped(*, is_master: bool, group_id: uuid.UUID | None) -> None:
+    """The master device is never part of a group -- guard requested
+    2026-11-04, enforced here (not just hidden in the frontend form's
+    "Groupe" select) so a direct API call can't bypass it either.
+    """
+    if is_master and group_id is not None:
+        raise HTTPException(
+            status_code=400, detail="The master device cannot be assigned to a group"
+        )
+
+
+def _check_master_active_unchanged(*, is_master: bool, active_changed: bool) -> None:
+    """The master device has no on/off button anywhere in the app --
+    guard requested 2026-11-04, enforced here so a direct `PATCH` can't
+    bypass the frontend's own hidden/removed button either. Master is
+    already never evaluated by the local agenda evaluator (confirmed
+    2026-10-28 -- it's always on, owns no calendar of its own), so this
+    doesn't change any real scheduling behavior, just closes off the
+    one remaining way `active` could still be flipped for it.
+    """
+    if is_master and active_changed:
+        raise HTTPException(
+            status_code=400, detail="The master device's active state can't be toggled directly"
+        )
+
+
 def _conflict_detail(error: IntegrityError) -> str:
     if "is_master" in str(error.orig):
         return "Another device is already the master"
@@ -91,8 +117,15 @@ def broadcast_activate(session: SessionDep, payload: ActivateRequest) -> Message
     `lora-daemon`'s own `orchestration.send_activate` already encodes as
     one true broadcast-addressed frame (`messages.encode_activate`),
     not a loop -- best-effort, same posture as `_trigger_remote_activate`.
+
+    The master device's own `active` column is deliberately left alone
+    here too (2026-11-04's "no on/off button anywhere" guard) -- the
+    real LoRa frame still reaches every device including master (a true
+    broadcast can't selectively exclude one address at the radio level,
+    and master receiving it is harmless), only this app's own local
+    state for master is never toggled by it.
     """
-    devices = list(session.exec(select(Device)).all())
+    devices = [d for d in session.exec(select(Device)).all() if not d.is_master]
     for device in devices:
         crud.set_device_active(session=session, device=device, active=payload.active)
 
@@ -117,6 +150,7 @@ def get_device(session: SessionDep, device_id: str) -> DevicePublic:
 @router.post("/", response_model=DevicePublic, status_code=201)
 def create_device(session: SessionDep, device_in: DeviceCreate) -> DevicePublic:
     _check_group_exists(session, device_in.group_id)
+    _check_master_not_grouped(is_master=device_in.is_master, group_id=device_in.group_id)
     try:
         device = crud.create_device(session=session, device_create=device_in)
     except IntegrityError as exc:
@@ -144,7 +178,17 @@ def update_device(
 ) -> DevicePublic:
     device = _get_device_or_404(session, device_id)
     _check_group_exists(session, device_in.group_id)
+
+    effective_is_master = (
+        device_in.is_master if "is_master" in device_in.model_fields_set else device.is_master
+    )
+    effective_group_id = (
+        device_in.group_id if "group_id" in device_in.model_fields_set else device.group_id
+    )
+    _check_master_not_grouped(is_master=effective_is_master, group_id=effective_group_id)
+
     active_changed = "active" in device_in.model_fields_set
+    _check_master_active_unchanged(is_master=effective_is_master, active_changed=active_changed)
 
     try:
         device = crud.update_device(session=session, db_device=device, device_in=device_in)

@@ -185,26 +185,50 @@ def _play_file(
         raise AudioPlayerError(f"Couldn't start mpv: {exc}") from exc
 
     time.sleep(EARLY_EXIT_CHECK_DELAY_S)
-    if _process.poll() is not None:
+    returncode = _process.poll()
+    if returncode is not None:
         stderr_output = ""
         if _process.stderr is not None:
             stderr_output = _process.stderr.read().decode("utf-8", errors="replace").strip()
         _process = None
+        if returncode == 0:
+            # Confirmed directly (2026-11-04, a real false-failure report):
+            # a short clip can genuinely finish playing before this check
+            # even runs -- mpv's own "Exiting... (End of file)" exit code
+            # 0, not a startup failure. Previously this whole branch
+            # assumed *any* exit within the check window meant "never
+            # played" and raised, which could surface a totally benign
+            # startup warning (e.g. mpv probing PipeWire, failing, then
+            # falling back to a working ALSA output) as if it were a
+            # fatal error on a file that had, in fact, already played
+            # successfully in full.
+            return
         detail = stderr_output or "no error output captured"
         raise AudioPlayerError(f"mpv exited immediately, nothing played: {detail}")
 
 
-def play() -> None:
+def play(*, loop: bool | None = None) -> None:
     """Plays this device's main configured audio file -- "Fichier
-    actuel", set via the main upload slot -- at the persisted volume and
-    loop setting. Also the file the real `apply_active_state`
-    implementation (not built yet) should eventually use.
+    actuel", set via the main upload slot -- at the persisted volume,
+    and the persisted loop setting unless `loop` overrides it.
+
+    This is also the function `apply_active_state` (the real ACTIVATE
+    wiring, `app/services/activation.py`) calls -- it passes
+    `loop=True` explicitly (decided 2026-11-04: a live show's
+    background audio should keep looping until DEACTIVATE, regardless
+    of whatever the Audio page's own "Lire en boucle" checkbox happens
+    to be set to). The override is one-off, for this call only -- it
+    never writes back to the persisted state, so the Audio page's own
+    local calibration value (manual testing/calibration, independent of
+    real activation, same as `volume`) is left exactly as the user set
+    it. The Audio page's own "Lecture" button calls `play()` with no
+    override, so it keeps respecting the persisted value as before.
     """
     state = load_state()
     _play_file(
         target_file=state["audiofile"],
         volume=state["volume"],
-        loop=state["loop"],
+        loop=state["loop"] if loop is None else loop,
         not_configured_message="No audio file configured for this device yet",
     )
 

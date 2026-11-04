@@ -32,6 +32,20 @@ class DeviceNotFoundError(Exception):
         self.missing_device_ids = missing_device_ids
 
 
+class MasterDeviceCannotBeGroupedError(Exception):
+    """Raised by `set_group_devices` -- the master device can never be
+    in a group (guard requested 2026-11-04). `app/api/routes/devices.py`
+    already guards `POST`/`PATCH /devices/...` against this, but
+    `PATCH /groups/{uuid}/devices` (GroupsView.vue's own device picker)
+    is a completely separate path that writes `group_id` directly and
+    was found to bypass that guard entirely -- this closes that gap at
+    its own source rather than duplicating the check only in the route.
+    """
+
+    def __init__(self, device_ids: list[str]) -> None:
+        self.device_ids = device_ids
+
+
 class IgnitionPresetOverlapError(Exception):
     pass
 
@@ -449,6 +463,10 @@ def set_group_devices(
         missing = unique_ids - {device.device_id for device in devices}
         raise DeviceNotFoundError(sorted(missing))
 
+    master_ids = sorted(device.device_id for device in devices if device.is_master)
+    if master_ids:
+        raise MasterDeviceCannotBeGroupedError(master_ids)
+
     for device in list(db_group.devices):
         if device.device_id not in unique_ids:
             device.group_id = None
@@ -627,6 +645,8 @@ def device_to_public(device: Device) -> DevicePublic:
         audiofile=device.audiofile,
         ip=device.ip,
         master_ip=device.master_ip,
+        last_seen=device.last_seen,
+        last_roundtrip_ms=device.last_roundtrip_ms,
         updated_at=device.updated_at,
     )
 

@@ -23,6 +23,26 @@ def test_create_device(client: TestClient) -> None:
     assert content["is_master"] is False
     assert "uuid" not in content
     assert "updated_at" in content
+    # Never pinged yet -- both null.
+    assert content["last_seen"] is None
+    assert content["last_roundtrip_ms"] is None
+
+
+def test_get_device_reports_last_seen_once_recorded(
+    client: TestClient, session: Session
+) -> None:
+    from app import crud
+
+    created = client.post(DEVICES_URL, json=device_payload(device_number=13)).json()
+    db_device = crud.get_device_by_device_id(session=session, device_id=created["device_id"])
+    crud.record_device_seen(session=session, device=db_device, roundtrip_ms=42)
+
+    response = client.get(f"{DEVICES_URL}{created['device_id']}")
+
+    assert response.status_code == 200
+    content = response.json()
+    assert content["last_seen"] is not None
+    assert content["last_roundtrip_ms"] == 42
 
 
 def test_create_device_rejects_negative_device_number(client: TestClient) -> None:
@@ -35,6 +55,105 @@ def test_create_device_rejects_device_number_at_or_above_ceiling(client: TestCli
     response = client.post(DEVICES_URL, json=device_payload(device_number=32))
 
     assert response.status_code == 422
+
+
+def test_create_master_device_rejects_a_group(client: TestClient, session: Session) -> None:
+    group = create_group(session)
+
+    response = client.post(
+        DEVICES_URL, json=device_payload(is_master=True, group_id=str(group.uuid))
+    )
+
+    assert response.status_code == 400
+
+
+def test_create_master_device_without_a_group_succeeds(client: TestClient) -> None:
+    response = client.post(DEVICES_URL, json=device_payload(is_master=True))
+
+    assert response.status_code == 201
+    assert response.json()["group_id"] is None
+
+
+def test_update_device_rejects_assigning_a_group_to_the_master(
+    client: TestClient, session: Session
+) -> None:
+    group = create_group(session)
+    created = client.post(DEVICES_URL, json=device_payload(is_master=True)).json()
+
+    response = client.patch(
+        f"{DEVICES_URL}{created['device_id']}", json={"group_id": str(group.uuid)}
+    )
+
+    assert response.status_code == 400
+
+
+def test_update_device_rejects_making_a_grouped_device_master(
+    client: TestClient, session: Session
+) -> None:
+    group = create_group(session)
+    created = client.post(
+        DEVICES_URL, json=device_payload(group_id=str(group.uuid))
+    ).json()
+
+    response = client.patch(f"{DEVICES_URL}{created['device_id']}", json={"is_master": True})
+
+    assert response.status_code == 400
+
+
+def test_update_device_can_become_master_while_also_leaving_its_group(
+    client: TestClient, session: Session
+) -> None:
+    group = create_group(session)
+    created = client.post(
+        DEVICES_URL, json=device_payload(group_id=str(group.uuid))
+    ).json()
+
+    response = client.patch(
+        f"{DEVICES_URL}{created['device_id']}", json={"is_master": True, "group_id": None}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["is_master"] is True
+    assert response.json()["group_id"] is None
+
+
+def test_update_device_rejects_toggling_active_on_the_master(client: TestClient) -> None:
+    created = client.post(DEVICES_URL, json=device_payload(is_master=True)).json()
+
+    response = client.patch(
+        f"{DEVICES_URL}{created['device_id']}", json={"active": not created["active"]}
+    )
+
+    assert response.status_code == 400
+
+
+def test_update_device_can_change_other_fields_on_the_master(client: TestClient) -> None:
+    created = client.post(DEVICES_URL, json=device_payload(is_master=True)).json()
+
+    response = client.patch(
+        f"{DEVICES_URL}{created['device_id']}", json={"device_name": "Nouveau nom"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["device_name"] == "Nouveau nom"
+
+
+def test_broadcast_activate_does_not_touch_the_master(client: TestClient) -> None:
+    master = client.post(DEVICES_URL, json=device_payload(is_master=True)).json()
+    other = client.post(
+        DEVICES_URL, json=device_payload(device_number=3, is_master=False)
+    ).json()
+    master_active_before = master["active"]
+
+    client.post(f"{DEVICES_URL}broadcast-activate", json={"active": not master_active_before})
+
+    assert client.get(f"{DEVICES_URL}{master['device_id']}").json()["active"] == (
+        master_active_before
+    )
+    assert (
+        client.get(f"{DEVICES_URL}{other['device_id']}").json()["active"]
+        != other["active"]
+    )
 
 
 def test_patch_cannot_change_device_id(client: TestClient) -> None:

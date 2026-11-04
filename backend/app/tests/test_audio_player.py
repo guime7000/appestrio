@@ -15,14 +15,17 @@ class _FakeStderr:
 
 
 class _FakeProcess:
-    def __init__(self, *, exits_immediately: bool = False, stderr: bytes = b"") -> None:
+    def __init__(
+        self, *, exits_immediately: bool = False, returncode: int = 1, stderr: bytes = b""
+    ) -> None:
         self.terminated = False
         self.killed = False
         self._exited = exits_immediately
+        self._returncode = returncode
         self.stderr = _FakeStderr(stderr)
 
     def poll(self) -> int | None:
-        return 0 if self._exited else None
+        return self._returncode if self._exited else None
 
     def terminate(self) -> None:
         self.terminated = True
@@ -140,6 +143,45 @@ def test_play_passes_loop_file_inf_when_loop_enabled(monkeypatch: pytest.MonkeyP
     assert "--loop-file=inf" in seen_args[0]
 
 
+def test_play_loop_override_wins_over_persisted_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    name = _write_audio_file()
+    _set_state(volume=50, audiofile=name, loop=False)
+    seen_args: list[list[str]] = []
+    monkeypatch.setattr(
+        audio_player, "_start_process", lambda args: (seen_args.append(args), _FakeProcess())[1]
+    )
+
+    audio_player.play(loop=True)
+
+    assert "--loop-file=inf" in seen_args[0]
+
+
+def test_play_loop_override_wins_over_persisted_true(monkeypatch: pytest.MonkeyPatch) -> None:
+    name = _write_audio_file()
+    _set_state(volume=50, audiofile=name, loop=True)
+    seen_args: list[list[str]] = []
+    monkeypatch.setattr(
+        audio_player, "_start_process", lambda args: (seen_args.append(args), _FakeProcess())[1]
+    )
+
+    audio_player.play(loop=False)
+
+    assert "--loop-file=no" in seen_args[0]
+
+
+def test_play_loop_override_does_not_persist(monkeypatch: pytest.MonkeyPatch) -> None:
+    name = _write_audio_file()
+    _set_state(volume=50, audiofile=name, loop=False)
+    monkeypatch.setattr(audio_player, "_start_process", lambda _args: _FakeProcess())
+
+    audio_player.play(loop=True)
+
+    # The override is one-off, for this call only -- the Audio page's
+    # own persisted calibration value is left exactly as the user set
+    # it (same posture as `volume`).
+    assert audio_player.load_state()["loop"] is False
+
+
 def test_play_does_not_touch_test_audiofile(monkeypatch: pytest.MonkeyPatch) -> None:
     name = _write_audio_file()
     _set_state(volume=50, audiofile=name, test_audiofile="test/tone.mp3")
@@ -171,11 +213,37 @@ def test_play_raises_with_stderr_when_mpv_exits_immediately(
     monkeypatch.setattr(
         audio_player,
         "_start_process",
-        lambda _args: _FakeProcess(exits_immediately=True, stderr=b"AO: [alsa] no device\n"),
+        lambda _args: _FakeProcess(
+            exits_immediately=True, returncode=1, stderr=b"AO: [alsa] no device\n"
+        ),
     )
 
     with pytest.raises(audio_player.AudioPlayerError, match="no device"):
         audio_player.play()
+
+    assert audio_player.is_playing() is False
+
+
+def test_play_succeeds_when_mpv_finishes_a_short_clip_within_the_check_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Confirmed directly against a real mpv process (2026-11-04): a
+    # short clip can genuinely finish (exit code 0, "Exiting... (End of
+    # file)") before the early-exit check even runs -- this must not be
+    # reported as a failure, even if mpv printed something benign to
+    # stderr along the way (e.g. a PipeWire probe warning before
+    # falling back to a working ALSA output).
+    name = _write_audio_file()
+    _set_state(volume=50, audiofile=name)
+    monkeypatch.setattr(
+        audio_player,
+        "_start_process",
+        lambda _args: _FakeProcess(
+            exits_immediately=True, returncode=0, stderr=b"some benign startup warning\n"
+        ),
+    )
+
+    audio_player.play()  # must not raise
 
     assert audio_player.is_playing() is False
 

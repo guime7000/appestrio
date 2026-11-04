@@ -233,6 +233,22 @@ def test_set_group_devices_group_not_found(client: TestClient) -> None:
     assert response.status_code == 404
 
 
+def test_set_group_devices_rejects_the_master(client: TestClient, session: Session) -> None:
+    # This endpoint is a separate path from PATCH /devices/{id} --
+    # found to bypass that route's own master-group guard entirely
+    # (2026-11-04), so it needs its own coverage here too.
+    group = create_group(session)
+    master = client.post(DEVICES_URL, json=device_payload(is_master=True)).json()
+
+    response = client.patch(
+        f"{GROUPS_URL}{group.uuid}/devices",
+        json={"device_ids": [master["device_id"]]},
+    )
+
+    assert response.status_code == 400
+    assert client.get(f"{DEVICES_URL}{master['device_id']}").json()["group_id"] is None
+
+
 def _mark_synced(session: Session, device_id: str) -> None:
     """Directly sets synced_version = config_version for a test device --
     no public API does this (it's lora-daemon's own write, via a real

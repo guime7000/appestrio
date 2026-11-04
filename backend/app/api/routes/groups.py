@@ -78,6 +78,11 @@ def set_group_devices(
             status_code=404,
             detail=f"Device(s) not found: {', '.join(exc.missing_device_ids)}",
         )
+    except crud.MasterDeviceCannotBeGroupedError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"The master device cannot be assigned to a group: {', '.join(exc.device_ids)}",
+        )
     return DevicesPublic(
         data=[crud.device_to_public(device) for device in group.devices],
         count=len(group.devices),

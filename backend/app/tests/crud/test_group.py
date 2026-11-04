@@ -145,3 +145,57 @@ def test_set_group_devices_not_found(session: Session) -> None:
         assert exc.missing_device_ids == [missing_device_id]
 
     assert raised
+
+
+def test_set_group_devices_rejects_the_master(session: Session) -> None:
+    # The master device can never be in a group -- this is a separate
+    # code path from app/api/routes/devices.py's own guard (found to
+    # bypass it entirely, 2026-11-04), so it needs its own test here.
+    group = crud.create_group(
+        session=session, group_create=GroupCreate(**group_payload())
+    )
+    master = crud.create_device(
+        session=session, device_create=DeviceCreate(**device_payload(is_master=True))
+    )
+
+    try:
+        crud.set_group_devices(
+            session=session, db_group=group, device_ids=[master.device_id]
+        )
+        raised = False
+    except crud.MasterDeviceCannotBeGroupedError as exc:
+        raised = True
+        assert exc.device_ids == [master.device_id]
+
+    assert raised
+    session.refresh(master)
+    assert master.group_id is None
+
+
+def test_set_group_devices_rejects_the_master_alongside_other_devices(
+    session: Session,
+) -> None:
+    group = crud.create_group(
+        session=session, group_create=GroupCreate(**group_payload())
+    )
+    master = crud.create_device(
+        session=session, device_create=DeviceCreate(**device_payload(is_master=True))
+    )
+    other = crud.create_device(
+        session=session,
+        device_create=DeviceCreate(**device_payload(device_number=3)),
+    )
+
+    try:
+        crud.set_group_devices(
+            session=session, db_group=group, device_ids=[master.device_id, other.device_id]
+        )
+        raised = False
+    except crud.MasterDeviceCannotBeGroupedError:
+        raised = True
+
+    assert raised
+    # Nothing committed -- the whole request is rejected, not just the
+    # master's own row.
+    session.refresh(other)
+    assert other.group_id is None

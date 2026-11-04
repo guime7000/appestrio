@@ -54,6 +54,11 @@ const allSelected = computed(
   () => groups.value.length > 0 && selectedGroupUuids.value.size === groups.value.length,
 );
 
+// The master device can never be in a group (backend-enforced,
+// 2026-11-04) -- excluded from the picker entirely rather than shown
+// as a checkbox that would just come back as a 400 if ticked.
+const pickableDevices = computed(() => allDevices.value.filter((d) => !d.is_master));
+
 async function loadAll() {
   const [groupsResult, devicesResult, calendarsResult, pendingSyncResult] = await Promise.all([
     groupsApi.list(),
@@ -393,7 +398,7 @@ onMounted(async () => {
 
   <div v-if="editingGroupUuid" class="picker">
     <h2>Appareils du groupe</h2>
-    <label v-for="device in allDevices" :key="device.device_id" class="picker-row">
+    <label v-for="device in pickableDevices" :key="device.device_id" class="picker-row">
       <input
         type="checkbox"
         :checked="selectedDeviceIds.has(device.device_id)"

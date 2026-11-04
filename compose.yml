@@ -18,6 +18,11 @@ services:
       # named volume's opaque Docker-managed storage).
       - AUDIO_DIR=/app/data/audio
       - AUDIO_STATE_PATH=/app/data/audio/audio_player_state.json
+      # The Upload page's QLC+ field (app/services/qlc_files.py) --
+      # same host folder `qlcplus`'s own service (below) reads its one
+      # project file + fixtures from, mounted here too so this
+      # container can write into it directly.
+      - QLC_PROJECT_DIR=/app/data/qlc
     volumes:
       - app-db-data:/app/data
       # /home/pi/OhmFiles/audio must exist on the host (Docker
@@ -26,6 +31,18 @@ services:
       # start) -- see Docs/Raspberry_Pi_Deployment.md for the full
       # fleet directory layout.
       - /home/pi/OhmFiles/audio:/app/data/audio
+      # The Upload page's "Son test" field (2026-11-04) -- a genuinely
+      # separate host folder from the main audio one above, bind-mounted
+      # straight onto the container path `audio_player.py`'s existing
+      # `test/` subdirectory convention already resolves
+      # (`AUDIO_DIR/test/<filename>`) -- no Python code change needed,
+      # the container-internal path convention stays exactly as it was,
+      # only its *host-side backing* changed.
+      - /home/pi/OhmFiles/audio_test:/app/data/audio/test
+      # The Upload page's QLC+ field -- same fixed host path qlcplus's
+      # own service (below) mounts at /QLC/project, so an upload here
+      # and the project qlcplus actually loads are the same files.
+      - /home/pi/OhmFiles/qlc:/app/data/qlc
     # mpv (app/services/audio_player.py) needs the host's sound card to
     # actually produce audio. Unconditional, unlike lora-daemon's
     # /dev/rtc0 below needing a device-tree overlay first: every

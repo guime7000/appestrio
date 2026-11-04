@@ -18,6 +18,11 @@ services:
       - app-db-data:/app/data
       - ./backend/app:/app/app
       - ./dev-data/audio:/app/data/audio
+      - ./dev-data/audio_test:/app/data/audio/test
+      # Same host folder `qlcplus`'s own dev override (below) mounts at
+      # /QLC/project -- an upload here and what qlcplus actually loads
+      # are the same local files on a dev laptop too.
+      - ./qlcplus/OhmQLCFiles:/app/data/qlc
     command: ["fastapi", "run", "--reload"]
     # compose.yml's own `devices:` includes /dev/gpiochip0 for
     # app/services/relay.py -- unconditional there because every real

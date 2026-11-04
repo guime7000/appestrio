@@ -83,12 +83,23 @@ class Settings(BaseSettings):
     AUDIO_RELAY_GPIO_PIN: int = 25
 
     # QLC+'s own WebSocket API (app/services/dmx_player.py) -- "qlcplus"
-    # is the compose.dmx.yml service name, resolvable on the shared
-    # compose network; port 9999 is the same one the "QLC+" nav link
-    # opens in a browser (app/api/routes/dmx.py).
+    # is the compose.yml service name, resolvable on the shared compose
+    # network; port 9999 is the same one the "QLC+" nav link opens in a
+    # browser (app/api/routes/dmx.py) and also serves QLC+'s plain HTTP
+    # endpoints (e.g. /loadProject, used by app/services/qlc_files.py's
+    # live-reload push).
     QLCPLUS_HOST: str = "qlcplus"
     QLCPLUS_WS_PORT: int = 9999
     QLCPLUS_WS_TIMEOUT_S: float = 3.0
+
+    # Upload page's QLC+ field (app/services/qlc_files.py) -- the
+    # project (.qxw) + fixture (.qxf) library, same host-mounted folder
+    # qlcplus.sh's own entrypoint scans at startup for its one project
+    # file (directory-search autoload, 2026-11-04). Relative for local
+    # dev, same convention as AUDIO_DIR; overridden absolute in
+    # compose.yml.
+    QLC_PROJECT_DIR: str = "qlc"
+    QLC_MAX_UPLOAD_BYTES: int = 20 * 1024 * 1024
 
     @computed_field  # type: ignore[prop-decorator]
     @property

@@ -19,6 +19,10 @@ const navLinks = computed(() => [
   { to: "/", label: "Inauguration" },
   ...(whoami.isMaster ? [{ to: "/configuration", label: "Configuration" }] : []),
   ...(audio.handlesAudio ? [{ to: "/audio", label: "Audio" }] : []),
+  // Gated by either capability -- the Upload page itself only shows
+  // the fields relevant to this device (handles_audio/handles_dmx),
+  // same gating each field already follows individually.
+  ...(audio.handlesAudio || dmx.handlesDmx ? [{ to: "/upload", label: "Upload" }] : []),
 ]);
 
 // QLC+ (`compose.dmx.yml`, only started on devices that actually have a
